@@ -63,9 +63,8 @@ impl OpenCADStudio {
             remembered.allow_exploding = state.allow_exploding;
             remembered.open_in_editor = state.open_in_editor;
         }
-        self.block_definition_open_editor = state
-            .open_in_editor
-            .then(|| state.name.trim().to_string());
+        self.block_definition_open_editor =
+            state.open_in_editor.then(|| state.name.trim().to_string());
         self.persist_settings_if_changed();
         let i = self.active_tab;
         let base_point = state.parse_base_point();
@@ -328,6 +327,10 @@ impl OpenCADStudio {
                     self.command_line.push_info(&cmd.prompt());
                     self.tabs[i].active_cmd = Some(Box::new(cmd));
                 } else {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if self.request_metraj_delete(&handles, true) {
+                        return Some(Task::none());
+                    }
                     let base = super::super::helpers::entities_lower_left_by_bbox(
                         &self.tabs[i].scene.document,
                         &handles,
@@ -654,11 +657,14 @@ impl OpenCADStudio {
                             .remove(&name.to_ascii_uppercase())
                             .unwrap_or_default();
                         let preview = self.tabs[i].scene.block_preview_wires(&name);
-                        let mut cmd = InsertBlockCommand::classic_for_block(name.clone(), preview, units);
-                        if let Some(record)=self.tabs[i].scene.document.block_records.get(&name) {
-                            let doc=&self.tabs[i].scene.document;
-                            cmd.set_insertion_points(crate::scene::render_graph::block_base_point(doc,&name),
-                                crate::scene::block_grips::insertion_points(doc,record.handle));
+                        let mut cmd =
+                            InsertBlockCommand::classic_for_block(name.clone(), preview, units);
+                        if let Some(record) = self.tabs[i].scene.document.block_records.get(&name) {
+                            let doc = &self.tabs[i].scene.document;
+                            cmd.set_insertion_points(
+                                crate::scene::render_graph::block_base_point(doc, &name),
+                                crate::scene::block_grips::insertion_points(doc, record.handle),
+                            );
                         }
                         self.command_line.push_info(&cmd.prompt());
                         self.tabs[i].active_cmd = Some(Box::new(cmd));

@@ -19,9 +19,12 @@ fn node_id(req: &Value, key: &str) -> Parsed<NodeId> {
 
 fn port(req: &Value, key: &str) -> Parsed<Port> {
     let value = &req[key];
-    let field = value["field"]
-        .as_str()
-        .ok_or_else(|| failure("port_required", format!("Supply {key}: {{\"node\":id,\"field\":name}}")))?;
+    let field = value["field"].as_str().ok_or_else(|| {
+        failure(
+            "port_required",
+            format!("Supply {key}: {{\"node\":id,\"field\":name}}"),
+        )
+    })?;
     Ok(Port {
         node: node_id(value, "node")?,
         field: field.to_owned(),

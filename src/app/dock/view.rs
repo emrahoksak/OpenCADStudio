@@ -471,7 +471,9 @@ impl OpenCADStudio {
                     self.parameter_placement_error("FLIP"),
                     if self.block_editor_preferences.action_bars {
                         Some("Use the Lookup parameter action bar, or set BACTIONBARMODE to 0.")
-                    } else { self.lookup_table_error() },
+                    } else {
+                        self.lookup_table_error()
+                    },
                     self.properties_table_error(),
                     self.action_error(Some(crate::scene::block_actions::Kind::Move)),
                     self.action_error(Some(crate::scene::block_actions::Kind::Scale)),
@@ -523,10 +525,25 @@ impl OpenCADStudio {
                     .scene
                     .active_viewport
                     .filter(|_| tab.scene.current_layout != "Model");
-                tab.layers.view_panel(self.layer_name_col_w, width, chrome, active_vp)
+                tab.layers
+                    .view_panel(self.layer_name_col_w, width, chrome, active_vp)
             }
             crate::ui::dock::PanelId::Laywalk => self.layer_walk_view(tab, width, chrome),
             crate::ui::dock::PanelId::QuickCalc => self.quick_calc_view(tab, width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajTree => self.metraj.tree_view(width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajItems => self.metraj.items_view(width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajSummary => self.metraj.summary_view(width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajRebar => self.metraj.rebar_view(width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajQuantityGroups => self.metraj.items_view(width, chrome),
+            #[cfg(not(target_arch = "wasm32"))]
+            crate::ui::dock::PanelId::MetrajAssignments => {
+                self.metraj.assignments_view(width, chrome)
+            }
             crate::ui::dock::PanelId::Plugin(num) => {
                 if let Some(panel_id) = self.plugin_panel_by_num.get(&num) {
                     if let Some(state) = self.plugin_panels.get(panel_id) {

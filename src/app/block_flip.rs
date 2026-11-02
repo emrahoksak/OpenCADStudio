@@ -98,15 +98,14 @@ impl OpenCADStudio {
         if self.reject_locked_edit(i, popup.insert_handle) {
             return;
         }
-        let _ = self.handle_block_action_result(
-            crate::command::CmdResult::EvaluateBlockParameter {
+        let _ =
+            self.handle_block_action_result(crate::command::CmdResult::EvaluateBlockParameter {
                 grip: None,
                 document: popup.document,
                 definition: popup.definition,
                 parameter: popup.parameter,
                 insert: Some(popup.insert_handle),
                 value: actions::Value::Flip(flipped),
-            },
-        );
+            });
     }
 }

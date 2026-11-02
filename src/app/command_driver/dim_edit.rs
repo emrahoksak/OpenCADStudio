@@ -505,7 +505,10 @@ pub(super) fn overlapping_dimensions(scene: &crate::scene::Scene, new: Handle) -
     let Some((low, high)) = span(new) else {
         return Vec::new();
     };
-    let owner = scene.document.get_entity(new).map(|e| e.common().owner_handle);
+    let owner = scene
+        .document
+        .get_entity(new)
+        .map(|e| e.common().owner_handle);
     let line = across(definition);
     let tolerance = (high - low).abs().max(1.0) * 1.0e-9;
     scene
@@ -514,7 +517,11 @@ pub(super) fn overlapping_dimensions(scene: &crate::scene::Scene, new: Handle) -
         .map(|entity| entity.common().handle)
         .filter(|&handle| handle != new)
         .filter(|&handle| {
-            scene.document.get_entity(handle).map(|e| e.common().owner_handle) == owner
+            scene
+                .document
+                .get_entity(handle)
+                .map(|e| e.common().owner_handle)
+                == owner
         })
         .filter(|&handle| {
             let Some((other_axis, _, other_definition)) = spacing_axis(scene, handle) else {
@@ -694,7 +701,11 @@ fn spacing_axis(
         Dimension::Linear(d) => Some((
             [d.rotation.cos(), d.rotation.sin(), 0.0],
             [d.base.normal.x, d.base.normal.y, d.base.normal.z],
-            [d.definition_point.x, d.definition_point.y, d.definition_point.z],
+            [
+                d.definition_point.x,
+                d.definition_point.y,
+                d.definition_point.z,
+            ],
         )),
         Dimension::Aligned(d) => Some((
             [
@@ -703,7 +714,11 @@ fn spacing_axis(
                 d.second_point.z - d.first_point.z,
             ],
             [d.base.normal.x, d.base.normal.y, d.base.normal.z],
-            [d.definition_point.x, d.definition_point.y, d.definition_point.z],
+            [
+                d.definition_point.x,
+                d.definition_point.y,
+                d.definition_point.z,
+            ],
         )),
         _ => None,
     }

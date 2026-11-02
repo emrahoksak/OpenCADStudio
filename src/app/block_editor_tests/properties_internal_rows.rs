@@ -71,8 +71,10 @@ fn block_reference_properties_hide_internal_records_and_name_the_definition() {
     app.refresh_properties();
     let sections = &app.tabs[i].properties.sections;
     assert!(
-        !sections.iter().any(|section| section.title == "Dynamic Block"
-            || section.title == "Dynamic Parameters / Actions"),
+        !sections
+            .iter()
+            .any(|section| section.title == "Dynamic Block"
+                || section.title == "Dynamic Parameters / Actions"),
         "{:?}",
         sections.iter().map(|s| &s.title).collect::<Vec<_>>()
     );

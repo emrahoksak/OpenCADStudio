@@ -162,7 +162,11 @@ impl CadCommand for ActionCommand {
         }
         if self.kind.is_some_and(actions::needs_frame) && self.frame.is_empty() {
             if self.kind == Some(Kind::PolarStretch) {
-                let point = if self.xy_key_point == Some(XyKeyPoint::Base) { "Base" } else { "End" };
+                let point = if self.xy_key_point == Some(XyKeyPoint::Base) {
+                    "Base"
+                } else {
+                    "End"
+                };
                 return crate::tf!("BACTION  Specify first corner of action frame or [CPolygon/Base/End] <{point}>:").into_owned();
             }
             if let Some(point) = self.xy_key_point {
@@ -282,13 +286,20 @@ impl CadCommand for ActionCommand {
         }
     }
     fn on_text_input(&mut self, s: &str) -> Option<CmdResult> {
-        if self.parameter.is_some() && self.kind == Some(Kind::PolarStretch) && self.frame.is_empty() && !self.frame_done {
+        if self.parameter.is_some()
+            && self.kind == Some(Kind::PolarStretch)
+            && self.frame.is_empty()
+            && !self.frame_done
+        {
             let key = match s.trim().to_ascii_uppercase().as_str() {
                 "BASE" | "B" => Some(XyKeyPoint::Base),
                 "END" | "E" => Some(XyKeyPoint::End),
                 _ => None,
             };
-            if let Some(key) = key { self.xy_key_point = Some(key); return Some(CmdResult::NeedPoint); }
+            if let Some(key) = key {
+                self.xy_key_point = Some(key);
+                return Some(CmdResult::NeedPoint);
+            }
         }
         if self.parameter.is_some()
             && self.kind.is_some_and(actions::needs_frame)
@@ -345,10 +356,7 @@ impl CadCommand for ActionCommand {
             }
         }
         if self.kind.is_none() {
-            if matches!(
-                s.trim().to_ascii_uppercase().as_str(),
-                "LOOKUP" | "L"
-            ) {
+            if matches!(s.trim().to_ascii_uppercase().as_str(), "LOOKUP" | "L") {
                 return Some(CmdResult::StartBlockLookupAction {
                     document: self.document,
                     definition: self.definition,
@@ -631,7 +639,10 @@ impl TestParameterCommand {
             document: self.document,
             definition: self.definition,
             parameter: self.parameter,
-            value: self.grip_input.as_ref().map(|input| input.value(position))
+            value: self
+                .grip_input
+                .as_ref()
+                .map(|input| input.value(position))
                 .unwrap_or(actions::Value::Point(position - self.display_offset)),
         }
     }
@@ -642,8 +653,12 @@ impl CadCommand for TestParameterCommand {
     }
     fn cursor_plane(&self) -> Option<(DVec3, DVec3)> {
         let input = self.grip_input.as_ref()?;
-        let normal = actions::v(input.to_world.apply_rotation(actions::native(DVec3::Z))).try_normalize()?;
-        Some((normal, actions::v(input.to_world.apply(actions::native(input.frame.base)))))
+        let normal =
+            actions::v(input.to_world.apply_rotation(actions::native(DVec3::Z))).try_normalize()?;
+        Some((
+            normal,
+            actions::v(input.to_world.apply(actions::native(input.frame.base))),
+        ))
     }
     fn block_parameter_grip_id(&self) -> Option<usize> {
         self.grip_input.as_ref().map(|input| input.id)

@@ -3,9 +3,7 @@
 #![allow(unused_imports)]
 use super::util::*;
 use super::{format_size, VIEWCUBE_HIT_SIZE};
-use crate::app::helpers::{
-    parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind,
-};
+use crate::app::helpers::{parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind};
 use crate::app::{Message, OpenCADStudio, POLY_START_DELAY_MS};
 use crate::modules::ModuleEvent;
 use crate::scene::model::object::GripApply;
@@ -604,7 +602,10 @@ impl OpenCADStudio {
                 .define_block_raw(&def.name, def.base_point, def.entities.clone());
         }
         if redefine {
-            if let Err(err) = self.tabs[i].scene.redefine_block_raw(&name, base_point, entities) {
+            if let Err(err) = self.tabs[i]
+                .scene
+                .redefine_block_raw(&name, base_point, entities)
+            {
                 self.command_line.push_error(&err);
                 return Err(err);
             }
@@ -613,7 +614,11 @@ impl OpenCADStudio {
             // geometry there and put the insertion base on the block.
             let scene = &mut self.tabs[i].scene;
             scene.define_block_from_owned_entities(entities, &name, glam::DVec3::ZERO)?;
-            let block = scene.document.block_records.get(&name).map(|r| r.block_entity_handle);
+            let block = scene
+                .document
+                .block_records
+                .get(&name)
+                .map(|r| r.block_entity_handle);
             if let Some(codec::EntityType::Block(block)) =
                 block.and_then(|h| scene.document.get_entity_mut(h))
             {
@@ -1137,8 +1142,7 @@ impl OpenCADStudio {
             self.tabs[i].xref_unloaded.remove(key);
             self.tabs[i].xref_stat_cache.remove(key);
         }
-        let infos =
-            crate::io::xref::resolve_xrefs(&mut self.tabs[i].scene.document, &base_dir);
+        let infos = crate::io::xref::resolve_xrefs(&mut self.tabs[i].scene.document, &base_dir);
         let fresh = crate::io::xref::collect_entries_with_prev(
             &self.tabs[i].scene.document,
             &base_dir,

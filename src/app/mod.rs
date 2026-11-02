@@ -8,22 +8,21 @@ pub(crate) mod config;
 #[cfg(not(target_arch = "wasm32"))]
 pub use automation::{export_headless, run_batch, serve};
 mod annotation_data;
-mod extraction_catalog;
-mod block_actions;
-mod block_parameter_properties;
-mod block_alignment;
-mod block_feedback;
-mod block_flip;
-mod block_cycle_order;
-mod block_grip_set;
-mod block_construction;
-mod block_constraint_status;
 mod block_action_bars;
+mod block_actions;
+mod block_alignment;
 mod block_authoring_edit;
+mod block_constraint_status;
+mod block_construction;
+mod block_cycle_order;
 mod block_editor;
 #[cfg(test)]
 mod block_editor_tests;
+mod block_feedback;
+mod block_flip;
+mod block_grip_set;
 mod block_lookup;
+mod block_parameter_properties;
 mod block_properties;
 mod block_properties_table;
 #[cfg(test)]
@@ -35,6 +34,7 @@ mod block_test_tests;
 mod block_visibility;
 pub(crate) mod calc;
 mod command_driver;
+mod extraction_catalog;
 pub(crate) use command_driver::{
     copy_to_clipboard_kernel, define_block_raw_doc, paste_entities_kernel, PasteSpace,
 };
@@ -45,6 +45,7 @@ mod dimension_preview_tests;
 mod dock;
 mod document;
 mod drafting_settings;
+mod drawing_properties;
 pub(crate) mod expr_eval;
 mod find_replace;
 pub(crate) mod helpers;
@@ -54,25 +55,26 @@ mod layer_walk;
 mod layer_walk_tests;
 mod layers;
 mod measurement;
+#[cfg(not(target_arch = "wasm32"))]
+mod metraj;
 mod model_ops;
 mod mtext_editor;
 mod navigation;
+pub(crate) mod node_graph;
 #[cfg(test)]
 mod object_isolation_tests;
-pub(crate) mod node_graph;
 mod options_session;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod plugin_host;
 mod presspull_ops;
-mod drawing_properties;
-mod purge_dialog;
-mod rename_dialog;
 mod properties;
-mod quick_calc;
+mod purge_dialog;
 #[cfg(test)]
 mod qselect_tests;
+mod quick_calc;
 mod recent;
 mod record_api;
+mod rename_dialog;
 pub(crate) mod settings;
 mod shortcuts;
 mod startup;
@@ -1209,6 +1211,8 @@ pub(super) struct OpenCADStudio {
     /// Point Cloud Manager palette (POINTCLOUDMANAGER).
     pub(crate) pc_manager: crate::ui::window::pc_manager::PcManager,
     pub(crate) count_palette: crate::ui::window::count_palette::CountPalette,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) metraj: metraj::MetrajUi,
     /// The QuickCalc pallet (QUICKCALC / QC).
     pub(crate) quick_calc: crate::ui::window::quick_calc::QuickCalcPalette,
     /// Sheet Set Manager palette, the open sheet sets and their dialogs.
@@ -1351,7 +1355,8 @@ pub(super) struct OpenCADStudio {
     /// State backing an active declarative plugin modal dialog.
     pub(crate) plugin_dialog_state: Option<crate::ui::window::plugin_dialog::PluginDialogState>,
     /// Persistent dockable side panels registered by plugins.
-    pub(crate) plugin_panels: std::collections::BTreeMap<String, crate::ui::window::plugin_panel::PluginPanelState>,
+    pub(crate) plugin_panels:
+        std::collections::BTreeMap<String, crate::ui::window::plugin_panel::PluginPanelState>,
     /// Numeric mapping for PanelId::Plugin(u32).
     pub(crate) plugin_panel_ids: std::collections::HashMap<String, u32>,
     pub(crate) plugin_panel_by_num: std::collections::HashMap<u32, String>,
@@ -2900,6 +2905,8 @@ pub enum ModalKind {
     PointStyle,
     AttributeEditor,
     LayerDeleteWarning,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajDeleteWarning,
     Aliases,
     NamedParameters,
     BlockEditorSettings,
@@ -3063,6 +3070,8 @@ pub enum PasteFocus {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    #[cfg(not(target_arch = "wasm32"))]
+    Metraj(metraj::MetrajMsg),
     GraphicAttributes(crate::ui::window::graphic_attributes::GraphicAttributesMsg),
     SpaceMouseWake,
     SpaceMouseFrame(iced::time::Instant),
@@ -3214,10 +3223,7 @@ pub enum Message {
     WebFileCached(u64, crate::io::WebOpenOutcome, Result<(), String>),
     FileOpened(
         u64,
-        Result<
-            (String, PathBuf, Document, crate::scene::DerivedCaches),
-            crate::io::OpenLoadError,
-        >,
+        Result<(String, PathBuf, Document, crate::scene::DerivedCaches), crate::io::OpenLoadError>,
     ),
     RecoveryClose,
     RecoveryAttempt,
@@ -4075,6 +4081,7 @@ pub enum Message {
         build_ms: f64,
     },
     WindowResized(f32, f32),
+    WindowResizedIn(window::Id, f32, f32),
     /// A window opened at this size; the main window's sets the layout as
     /// a resize does.
     WindowOpened(window::Id, f32, f32),
@@ -4446,15 +4453,27 @@ pub enum Message {
     },
     /// User committed a geometry/common field edit (Enter pressed).
     PropGeomCommit(&'static str),
-    PropBlockInput { key: crate::scene::model::object::BlockParameterKey, value: String },
+    PropBlockInput {
+        key: crate::scene::model::object::BlockParameterKey,
+        value: String,
+    },
     PropBlockCommit(crate::scene::model::object::BlockParameterKey),
-    PropBlockChoice { key: crate::scene::model::object::BlockParameterKey, index: usize },
+    PropBlockChoice {
+        key: crate::scene::model::object::BlockParameterKey,
+        index: usize,
+    },
     /// Open or close the dynamic-value list of one row. It carries the surface
     /// it was clicked on, so the same row's two copies toggle independently.
-    PropBlockPickerToggle { key: crate::scene::model::object::BlockParameterKey, quick: bool },
+    PropBlockPickerToggle {
+        key: crate::scene::model::object::BlockParameterKey,
+        quick: bool,
+    },
     /// The list's overlay dismissed itself: a click outside it, or the same
     /// Escape whose global shortcut arrives a moment later.
-    PropBlockPickerDismiss { key: crate::scene::model::object::BlockParameterKey, quick: bool },
+    PropBlockPickerDismiss {
+        key: crate::scene::model::object::BlockParameterKey,
+        quick: bool,
+    },
 
     /// Toggle a collapsed coordinate group ("Position", "Scale", …) open or
     /// closed in the Properties panel, keyed `section:base`.
@@ -5782,6 +5801,8 @@ impl OpenCADStudio {
             show_browser: false,
             pc_manager: Default::default(),
             count_palette: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            metraj: Default::default(),
             quick_calc: Default::default(),
             sheet_set: Default::default(),
             sheet_set_pending_layout: None,
@@ -6247,7 +6268,9 @@ impl OpenCADStudio {
 
     /// Open a declarative plugin modal dialog.
     pub(crate) fn open_plugin_dialog(&mut self, def: ocs_plugin_api::dialog::DialogDef) {
-        self.plugin_dialog_state = Some(crate::ui::window::plugin_dialog::PluginDialogState::new(def));
+        self.plugin_dialog_state = Some(crate::ui::window::plugin_dialog::PluginDialogState::new(
+            def,
+        ));
         self.active_modal = Some(ModalKind::PluginDialog);
     }
 
@@ -6547,6 +6570,9 @@ pub fn run() -> iced::Result {
     .subscription(OpenCADStudio::subscription)
     .scale_factor(|state: &OpenCADStudio, _| f32::from(state.ui_scale_percent) / 100.0)
     .title(|state: &OpenCADStudio, window_id: window::Id| {
+        if state.metraj.window == Some(window_id) {
+            return "Open CAD Studio · Metraj".to_string();
+        }
         let _ = window_id; // all dialogs are in-canvas modals now
         if let Some(tab) = state.tabs.get(state.active_tab) {
             let dot = if tab.dirty { "● " } else { "" };

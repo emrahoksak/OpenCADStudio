@@ -101,7 +101,8 @@ fn block_visibility_reference_description_survives_state_history_and_drawing_rel
             assert!(
                 matches!(&row.value, PropValue::ChoiceWithTooltip { selected, tooltip, .. }
                 if selected == "Alternative" && tooltip == &expected),
-                "{extension}, testing={testing}: {:?}", row.value
+                "{extension}, testing={testing}: {:?}",
+                row.value
             );
         }
         if !testing {

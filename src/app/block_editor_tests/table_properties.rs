@@ -341,7 +341,9 @@ fn blocks_reports_an_unmatched_table_row_as_present_and_unmatched() {
         .iter()
         .flat_map(|section| &section.props)
         .find_map(|property| match &property.value {
-            PropValue::BlockChoice { key, .. } if matches!(key.component, Component::TableRow(_)) => {
+            PropValue::BlockChoice { key, .. }
+                if matches!(key.component, Component::TableRow(_)) =>
+            {
                 Some(property.label.clone())
             }
             _ => None,

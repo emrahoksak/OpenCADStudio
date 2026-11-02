@@ -19,14 +19,18 @@ impl OpenCADStudio {
             ("ACISIN", true) if crate::sys::file_dia() => {
                 let filters = vec![("ACIS (*.sat)".to_string(), vec!["sat".to_string()])];
                 let title = crate::t!("Select ACIS File").into_owned();
-                Some(Task::perform(super::dgn_import::pick(title, filters), |path| match path {
-                    Some(path) => Message::Command(format!("_ACISINFILE {path}")),
-                    None => Message::Noop,
-                }))
+                Some(Task::perform(
+                    super::dgn_import::pick(title, filters),
+                    |path| match path {
+                        Some(path) => Message::Command(format!("_ACISINFILE {path}")),
+                        None => Message::Noop,
+                    },
+                ))
             }
             ("ACISIN", true) => {
                 use crate::command::FreeTextValuePromptCommand;
-                let command = FreeTextValuePromptCommand::new("_ACISINFILE", "Enter SAT file name:");
+                let command =
+                    FreeTextValuePromptCommand::new("_ACISINFILE", "Enter SAT file name:");
                 self.command_line.push_info(&command.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(command));
                 Some(Task::none())
@@ -39,8 +43,9 @@ impl OpenCADStudio {
                     let here = std::env::current_dir()
                         .map(|d| d.display().to_string())
                         .unwrap_or_default();
-                    self.command_line
-                        .push_error(&format!("\"{name}\": file not found in the current directory, {here}"));
+                    self.command_line.push_error(&format!(
+                        "\"{name}\": file not found in the current directory, {here}"
+                    ));
                     return Some(Task::none());
                 }
                 Some(self.import_model(i, rest, ModelFormat::Sat))
@@ -49,10 +54,13 @@ impl OpenCADStudio {
             ("WMFIN", true) if crate::sys::file_dia() => {
                 let filters = vec![("Metafile (*.wmf)".to_string(), vec!["wmf".to_string()])];
                 let title = crate::t!("Import WMF").into_owned();
-                Some(Task::perform(super::dgn_import::pick(title, filters), |path| match path {
-                    Some(path) => Message::Command(format!("_WMFINFILE {path}")),
-                    None => Message::Noop,
-                }))
+                Some(Task::perform(
+                    super::dgn_import::pick(title, filters),
+                    |path| match path {
+                        Some(path) => Message::Command(format!("_WMFINFILE {path}")),
+                        None => Message::Noop,
+                    },
+                ))
             }
             ("WMFIN", true) => {
                 use crate::command::FreeTextValuePromptCommand;
@@ -78,7 +86,12 @@ impl OpenCADStudio {
     }
 
     /// Reads a model file into drawing `i`.
-    pub(in crate::app) fn import_model(&mut self, i: usize, path: &str, format: ModelFormat) -> Task<Message> {
+    pub(in crate::app) fn import_model(
+        &mut self,
+        i: usize,
+        path: &str,
+        format: ModelFormat,
+    ) -> Task<Message> {
         let Some(bytes) = crate::scene::model::pdf_raster::source_bytes(path) else {
             self.command_line
                 .push_error(&format!("File {path} does not exist."));
@@ -93,8 +106,9 @@ impl OpenCADStudio {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         let Some(imported) = model_import::read(format, &bytes, drawing_mm, &stem) else {
-            self.command_line
-                .push_error(&format!("Import failed: {path} has no model the importer reads."));
+            self.command_line.push_error(&format!(
+                "Import failed: {path} has no model the importer reads."
+            ));
             return Task::none();
         };
         self.push_undo_snapshot(i, "IMPORT");
@@ -104,7 +118,10 @@ impl OpenCADStudio {
         // old definition), and the inserts are pointed at the names the
         // blocks got. An insert of a block that could not be made is left
         // out.
-        fn retarget(entities: Vec<codec::EntityType>, defined: &HashMap<String, String>) -> Vec<codec::EntityType> {
+        fn retarget(
+            entities: Vec<codec::EntityType>,
+            defined: &HashMap<String, String>,
+        ) -> Vec<codec::EntityType> {
             entities
                 .into_iter()
                 .filter_map(|entity| match entity {
@@ -116,7 +133,12 @@ impl OpenCADStudio {
                 })
                 .collect()
         }
-        let mut taken: Vec<String> = scene.document.block_records.iter().map(|b| b.name.clone()).collect();
+        let mut taken: Vec<String> = scene
+            .document
+            .block_records
+            .iter()
+            .map(|b| b.name.clone())
+            .collect();
         let mut defined: HashMap<String, String> = HashMap::new();
         for (name, entities) in imported.blocks {
             let unique = crate::modules::insert::xattach::unique_block_name(&name, &taken);
@@ -143,15 +165,19 @@ impl OpenCADStudio {
     /// A metafile as a new block `WMF<n>`, fitted to half the current view:
     /// placed at the view's top-left corner (IMPORT), or by the insertion
     /// prompts (WMFIN).
-    pub(in crate::app) fn import_wmf(&mut self, i: usize, path: &str, prompt: bool) -> Task<Message> {
+    pub(in crate::app) fn import_wmf(
+        &mut self,
+        i: usize,
+        path: &str,
+        prompt: bool,
+    ) -> Task<Message> {
         let Some(bytes) = crate::scene::model::pdf_raster::source_bytes(path) else {
             self.command_line
                 .push_error(&format!("File {path} does not exist."));
             return Task::none();
         };
         let (centre, size, pixel) = self.tabs[i].scene.view_window();
-        let Some(mut picture) =
-            crate::io::wmf_import::read(&bytes, [0.5 * size[0], 0.5 * size[1]])
+        let Some(mut picture) = crate::io::wmf_import::read(&bytes, [0.5 * size[0], 0.5 * size[1]])
         else {
             self.command_line
                 .push_error(&format!("{path} is not a valid Windows metafile."));
@@ -165,14 +191,18 @@ impl OpenCADStudio {
         // style the drawing already has is used as it is.
         let mut styles: Vec<String> = Vec::new();
         for (k, face) in picture.fonts.iter().enumerate() {
-            let n = picture.fonts[..k].iter().filter(|f| f.name == face.name).count();
+            let n = picture.fonts[..k]
+                .iter()
+                .filter(|f| f.name == face.name)
+                .count();
             // The face name comes from the file.
             let name = crate::scene::sanitized_table_name(&format!("WMF-{}{n}", face.name), "WMF");
             if !scene.document.text_styles.contains(&name) {
                 let mut style = codec::tables::TextStyle::new(name.as_str());
                 style.handle = scene.document.allocate_handle();
                 style.font_file =
-                    crate::scene::text::sysfont::face_file(&face.name, face.bold, face.italic).unwrap_or_default();
+                    crate::scene::text::sysfont::face_file(&face.name, face.bold, face.italic)
+                        .unwrap_or_default();
                 let _ = scene.document.text_styles.add(style);
             }
             styles.push(name);
@@ -212,7 +242,9 @@ impl OpenCADStudio {
                 0.0,
             );
             let insert = codec::entities::Insert::new(&name, corner);
-            self.tabs[i].scene.add_entity(codec::EntityType::Insert(insert));
+            self.tabs[i]
+                .scene
+                .add_entity(codec::EntityType::Insert(insert));
             self.refresh_properties();
         }
         Task::none()
@@ -231,7 +263,9 @@ impl OpenCADStudio {
             .iter()
             .map(|(name, object)| {
                 let materials = match object {
-                    crate::io::tds_import::TdsObject::Mesh(mesh) => scene.mesh_materials(mesh).len(),
+                    crate::io::tds_import::TdsObject::Mesh(mesh) => {
+                        scene.mesh_materials(mesh).len()
+                    }
                     _ => 0,
                 };
                 (name.clone(), object.kind(), materials)
@@ -287,7 +321,11 @@ impl OpenCADStudio {
                     let mut materials: Vec<(String, Option<[u8; 3]>)> = Vec::new();
                     for (material, faces) in mesh.groups.iter().rev() {
                         if !faces.is_empty() && !materials.iter().any(|(m, _)| m == material) {
-                            let diffuse = scene.materials.iter().find(|m| m.name == *material).and_then(|m| m.diffuse);
+                            let diffuse = scene
+                                .materials
+                                .iter()
+                                .find(|m| m.name == *material)
+                                .and_then(|m| m.diffuse);
                             materials.push((material.clone(), diffuse));
                         }
                     }
@@ -324,15 +362,16 @@ impl OpenCADStudio {
             }
             None if !several.is_empty() => {
                 request.asked = true;
-                self.import_dialogs.tds_material = Some(crate::ui::window::import_dialogs::TdsMaterialState {
-                    tab: i,
-                    request,
-                    queue: several,
-                    choice: 0,
-                    material: 0,
-                    list_open: false,
-                    remember: false,
-                });
+                self.import_dialogs.tds_material =
+                    Some(crate::ui::window::import_dialogs::TdsMaterialState {
+                        tab: i,
+                        request,
+                        queue: several,
+                        choice: 0,
+                        material: 0,
+                        list_open: false,
+                        remember: false,
+                    });
                 self.active_modal = Some(crate::app::ModalKind::TdsMaterial);
                 return Task::none();
             }
@@ -355,11 +394,17 @@ impl OpenCADStudio {
             0 => MultiMaterial::Split,
             1 => MultiMaterial::First,
             _ => MultiMaterial::Material(
-                chosen.and_then(|c| materials.iter().find(|(m, _)| m == c)).map(|(m, _)| m.clone()),
+                chosen
+                    .and_then(|c| materials.iter().find(|(m, _)| m == c))
+                    .map(|(m, _)| m.clone()),
             ),
         };
         let (name, materials) = state.queue.remove(0);
-        let chosen = state.material.checked_sub(1).and_then(|k| materials.get(k)).map(|(m, _)| m.clone());
+        let chosen = state
+            .material
+            .checked_sub(1)
+            .and_then(|k| materials.get(k))
+            .map(|(m, _)| m.clone());
         let answer = choice(&state, &materials, chosen.as_deref());
         state.request.multi.insert(name, answer);
         if state.remember {
@@ -381,7 +426,10 @@ impl OpenCADStudio {
 
     /// Cancel: the import stops at the asked mesh; the objects before it
     /// come in.
-    pub(in crate::app) fn stop_tds_import(&mut self, mut state: crate::ui::window::import_dialogs::TdsMaterialState) {
+    pub(in crate::app) fn stop_tds_import(
+        &mut self,
+        mut state: crate::ui::window::import_dialogs::TdsMaterialState,
+    ) {
         state.request.stop_at = state.queue.first().map(|(name, _)| name.clone());
         self.run_tds_import(state.tab, state.request);
     }
@@ -408,19 +456,31 @@ impl OpenCADStudio {
                 layers: request.layers,
                 multi: request.multi.clone(),
                 compact: request.compact,
-                single_layer: self.tabs[i].scene.document.header.current_layer_name.clone(),
+                single_layer: self.tabs[i]
+                    .scene
+                    .document
+                    .header
+                    .current_layer_name
+                    .clone(),
                 stop_at: request.stop_at.clone(),
             },
         );
         // Named views take the current view's proportions.
         let (_, size, _) = self.tabs[i].scene.view_window();
-        let aspect = if size[0] > 0.0 && size[1] > 0.0 { size[0] / size[1] } else { 1.0 };
+        let aspect = if size[0] > 0.0 && size[1] > 0.0 {
+            size[0] / size[1]
+        } else {
+            1.0
+        };
         self.push_undo_snapshot(i, "IMPORT");
         let document = &mut self.tabs[i].scene.document;
         // Materials live in the material dictionary; a drawing without one
         // imports the meshes without materials.
         let dictionary = document.header.acad_material_dict_handle;
-        let has_dictionary = matches!(document.objects.get(&dictionary), Some(ObjectType::Dictionary(_)));
+        let has_dictionary = matches!(
+            document.objects.get(&dictionary),
+            Some(ObjectType::Dictionary(_))
+        );
         // Materials by name: the drawing's own when it has one, else one
         // made from the file's colours.
         let mut materials: std::collections::HashMap<String, codec::Handle> = Default::default();
@@ -442,7 +502,9 @@ impl OpenCADStudio {
                         Some([r, g, b]) => codec::objects::MaterialColor {
                             flag: 1,
                             factor: 1.0,
-                            rgb: Some(crate::scene::convert::acis_import::packed_true_colour(r, g, b)),
+                            rgb: Some(crate::scene::convert::acis_import::packed_true_colour(
+                                r, g, b,
+                            )),
                         },
                         None => codec::objects::MaterialColor::default(),
                     };
@@ -465,10 +527,14 @@ impl OpenCADStudio {
                         material.diffuse_map.projection = 1;
                     }
                     let handle = material.handle;
-                    if let Some(ObjectType::Dictionary(dictionary)) = document.objects.get_mut(&dictionary) {
+                    if let Some(ObjectType::Dictionary(dictionary)) =
+                        document.objects.get_mut(&dictionary)
+                    {
                         dictionary.add_entry(name.clone(), handle);
                     }
-                    document.objects.insert(handle, ObjectType::Material(material));
+                    document
+                        .objects
+                        .insert(handle, ObjectType::Material(material));
                     handle
                 }
             };
@@ -483,7 +549,8 @@ impl OpenCADStudio {
         }
         for view in &import.views {
             let mut named = codec::tables::View::new(view.name.as_str());
-            named.target = codec::types::Vector3::new(view.target[0], view.target[1], view.target[2]);
+            named.target =
+                codec::types::Vector3::new(view.target[0], view.target[1], view.target[2]);
             named.direction =
                 codec::types::Vector3::new(view.direction[0], view.direction[1], view.direction[2]);
             named.height = view.height;
@@ -514,7 +581,8 @@ impl OpenCADStudio {
                 "AVE_MATERIAL",
             ));
         }
-        let mut parts: Vec<Option<crate::io::tds_import::TdsPart>> = import.parts.into_iter().map(Some).collect();
+        let mut parts: Vec<Option<crate::io::tds_import::TdsPart>> =
+            import.parts.into_iter().map(Some).collect();
         let mut first_material = true;
         // Asked about meshes one by one, each mesh also links to its
         // material record.
@@ -524,14 +592,18 @@ impl OpenCADStudio {
         for step in import.steps {
             match step {
                 TdsStep::Part(k) => {
-                    let Some(part) = parts.get_mut(k).and_then(Option::take) else { continue };
+                    let Some(part) = parts.get_mut(k).and_then(Option::take) else {
+                        continue;
+                    };
                     let mut mesh = part.mesh;
                     mesh.common.layer = part.layer.clone();
                     if let Some(color) = part.color {
                         mesh.common.color = codec::types::Color::Index(color);
                     }
-                    mesh.common.material_handle =
-                        part.material.as_ref().and_then(|m| materials.get(m).copied());
+                    mesh.common.material_handle = part
+                        .material
+                        .as_ref()
+                        .and_then(|m| materials.get(m).copied());
                     if mesh.common.material_handle.is_some() {
                         mesh.common.material_flags = 0b11;
                     }
@@ -541,10 +613,12 @@ impl OpenCADStudio {
                         mesh.common.extended_data.add_record(finish);
                     }
                     if legacy {
-                        mesh.common.extended_data.add_record(crate::io::tds_legacy::xdata(
-                            "AVE_ENTITY_MATERIAL",
-                            crate::io::tds_legacy::ENTITY_MATERIAL,
-                        ));
+                        mesh.common
+                            .extended_data
+                            .add_record(crate::io::tds_legacy::xdata(
+                                "AVE_ENTITY_MATERIAL",
+                                crate::io::tds_legacy::ENTITY_MATERIAL,
+                            ));
                     }
                     let handle = scene.add_entity(codec::EntityType::PolyfaceMesh(mesh));
                     if let Some(m) = part.material.filter(|m| asked && !records.contains_key(m)) {
@@ -553,7 +627,9 @@ impl OpenCADStudio {
                 }
                 TdsStep::Material(name) => {
                     let source = scene_materials.iter().find(|m| m.name == name);
-                    let unit = |c: Option<[u8; 3]>| c.unwrap_or([0; 3]).map(|v| f64::from(f32::from(v) / 255.0));
+                    let unit = |c: Option<[u8; 3]>| {
+                        c.unwrap_or([0; 3]).map(|v| f64::from(f32::from(v) / 255.0))
+                    };
                     let colours = [
                         unit(source.and_then(|m| m.ambient)),
                         unit(source.and_then(|m| m.diffuse)),
@@ -561,16 +637,22 @@ impl OpenCADStudio {
                     ];
                     let finish = crate::io::tds_legacy::MaterialFinish::of(source);
                     let handle = materials.get(&name);
-                    let handle = handle.map(|h| format!("{:X}", h.value())).unwrap_or_default();
-                    let mut insert = codec::entities::Insert::new("RM_SDB", codec::types::Vector3::ZERO);
+                    let handle = handle
+                        .map(|h| format!("{:X}", h.value()))
+                        .unwrap_or_default();
+                    let mut insert =
+                        codec::entities::Insert::new("RM_SDB", codec::types::Vector3::ZERO);
                     insert.common.layer = current_layer.clone();
-                    insert.common.extended_data.add_record(crate::io::tds_legacy::material_xdata(
-                        &name,
-                        colours,
-                        &finish,
-                        first_material,
-                        &handle,
-                    ));
+                    insert
+                        .common
+                        .extended_data
+                        .add_record(crate::io::tds_legacy::material_xdata(
+                            &name,
+                            colours,
+                            &finish,
+                            first_material,
+                            &handle,
+                        ));
                     first_material = false;
                     let values = crate::io::tds_legacy::material_values(
                         &name,
@@ -578,9 +660,16 @@ impl OpenCADStudio {
                         finish.roughness,
                         asked,
                     );
-                    with_attributes(&mut insert, crate::io::tds_legacy::material_block(), |tag| {
-                        values.iter().find(|(t, _)| *t == tag).map(|(_, v)| v.clone())
-                    });
+                    with_attributes(
+                        &mut insert,
+                        crate::io::tds_legacy::material_block(),
+                        |tag| {
+                            values
+                                .iter()
+                                .find(|(t, _)| *t == tag)
+                                .map(|(_, v)| v.clone())
+                        },
+                    );
                     let record = scene.add_entity(codec::EntityType::Insert(insert));
                     for (_, mesh) in waiting.iter().filter(|(m, _)| *m == name) {
                         if let Some(entity) = scene.document.get_entity_mut(*mesh) {
@@ -597,7 +686,12 @@ impl OpenCADStudio {
                     waiting.retain(|(m, _)| *m != name);
                     records.insert(name, record);
                 }
-                TdsStep::Light { name, position, color, spot } => {
+                TdsStep::Light {
+                    name,
+                    position,
+                    color,
+                    spot,
+                } => {
                     let at = codec::types::Vector3::new(position[0], position[1], position[2]);
                     let (block, definitions, record) = match spot {
                         None => (
@@ -608,12 +702,18 @@ impl OpenCADStudio {
                         Some((target, hotspot, falloff)) => (
                             "sh_spot",
                             crate::io::tds_legacy::spot_block(),
-                            crate::io::tds_legacy::spot_xdata(&name, target, color, hotspot, falloff),
+                            crate::io::tds_legacy::spot_xdata(
+                                &name, target, color, hotspot, falloff,
+                            ),
                         ),
                     };
                     let mut insert = codec::entities::Insert::new(block, at);
                     if let Some((target, ..)) = spot {
-                        aim_at(&mut insert, at, codec::types::Vector3::new(target[0], target[1], target[2]));
+                        aim_at(
+                            &mut insert,
+                            at,
+                            codec::types::Vector3::new(target[0], target[1], target[2]),
+                        );
                     }
                     insert.common.layer = current_layer.clone();
                     insert.common.extended_data.add_record(record);
@@ -644,14 +744,21 @@ fn legacy_insert(block: &str, color: Option<u8>, spec: &str, app: &str) -> codec
     if let Some(c) = color {
         insert.common.color = codec::types::Color::Index(c);
     }
-    insert.common.extended_data.add_record(crate::io::tds_legacy::xdata(app, spec));
+    insert
+        .common
+        .extended_data
+        .add_record(crate::io::tds_legacy::xdata(app, spec));
     codec::EntityType::Insert(insert)
 }
 
 /// Turns a spotlight's insert so the block's Y axis points from the
 /// light at `from` to its target, its X axis level: the insert's normal,
 /// rotation and (object coordinate) point.
-fn aim_at(insert: &mut codec::entities::Insert, from: codec::types::Vector3, to: codec::types::Vector3) {
+fn aim_at(
+    insert: &mut codec::entities::Insert,
+    from: codec::types::Vector3,
+    to: codec::types::Vector3,
+) {
     use glam::DVec3;
     let y = DVec3::new(to.x - from.x, to.y - from.y, to.z - from.z).normalize_or_zero();
     let x = y.cross(DVec3::Z).try_normalize().unwrap_or(DVec3::X);
@@ -684,8 +791,11 @@ fn with_attributes(
     let transform =
         crate::scene::render_graph::insert_transform_with_base(insert, codec::types::Vector3::ZERO);
     for entity in definitions {
-        let codec::EntityType::AttributeDefinition(def) = entity else { continue };
-        let mut attribute = codec::entities::AttributeEntity::from_definition(&def, value(&def.tag));
+        let codec::EntityType::AttributeDefinition(def) = entity else {
+            continue;
+        };
+        let mut attribute =
+            codec::entities::AttributeEntity::from_definition(&def, value(&def.tag));
         // A centred or right-justified value starts its share of the drawn
         // width (start to last ink) before the alignment point.
         use codec::entities::HorizontalAlignment as H;
@@ -717,7 +827,12 @@ impl OpenCADStudio {
     fn define_tds_legacy(&mut self, i: usize, import: &crate::io::tds_import::TdsImport) {
         use crate::io::tds_legacy::{light_block, material_block, LAYER};
         let scene = &mut self.tabs[i].scene;
-        for app in ["AVE_RENDER", "AVE_MATERIAL", "AVE_FINISH", "AVE_ENTITY_MATERIAL"] {
+        for app in [
+            "AVE_RENDER",
+            "AVE_MATERIAL",
+            "AVE_FINISH",
+            "AVE_ENTITY_MATERIAL",
+        ] {
             scene.ensure_app_id(app);
         }
         // The render layer is locked before the records go on it.
@@ -727,8 +842,16 @@ impl OpenCADStudio {
         }
         scene.layer_table_dirty = true;
         let document = &mut scene.document;
-        let lights = import.steps.iter().any(|s| matches!(s, TdsStep::Light { .. }));
-        if lights && !document.text_styles.iter().any(|s| s.name.eq_ignore_ascii_case(LAYER)) {
+        let lights = import
+            .steps
+            .iter()
+            .any(|s| matches!(s, TdsStep::Light { .. }));
+        if lights
+            && !document
+                .text_styles
+                .iter()
+                .any(|s| s.name.eq_ignore_ascii_case(LAYER))
+        {
             let mut style = codec::tables::TextStyle::new(LAYER);
             style.handle = document.allocate_handle();
             style.height = 0.2;
@@ -741,11 +864,19 @@ impl OpenCADStudio {
             blocks.push(("AVE_RENDER", Vec::new(), LAYER));
             blocks.push(("AVE_GLOBAL", Vec::new(), LAYER));
         }
-        if import.steps.iter().any(|s| matches!(s, TdsStep::Material(_))) {
+        if import
+            .steps
+            .iter()
+            .any(|s| matches!(s, TdsStep::Material(_)))
+        {
             blocks.push(("RM_SDB", material_block(), LAYER));
         }
         let spot = |s: &TdsStep| matches!(s, TdsStep::Light { spot: Some(_), .. });
-        if import.steps.iter().any(|s| matches!(s, TdsStep::Light { spot: None, .. })) {
+        if import
+            .steps
+            .iter()
+            .any(|s| matches!(s, TdsStep::Light { spot: None, .. }))
+        {
             blocks.push(("overhead", light_block(), "0"));
         }
         if import.steps.iter().any(spot) {
@@ -756,8 +887,15 @@ impl OpenCADStudio {
                 continue;
             }
             scene.define_block_raw(name, codec::types::Vector3::ZERO, entities);
-            let begin = scene.document.block_records.get(name).map(|b| b.block_entity_handle);
-            if let Some(common) = begin.and_then(|h| scene.document.get_entity_mut(h)).map(|e| e.common_mut()) {
+            let begin = scene
+                .document
+                .block_records
+                .get(name)
+                .map(|b| b.block_entity_handle);
+            if let Some(common) = begin
+                .and_then(|h| scene.document.get_entity_mut(h))
+                .map(|e| e.common_mut())
+            {
                 common.layer = layer.into();
             }
         }

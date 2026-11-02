@@ -83,7 +83,11 @@ pub(super) fn default_bindings() -> BTreeMap<String, String> {
         ("RIGHT".to_string(), "CARETRIGHT"),
     ]
     .into_iter()
-    .chain(PLATFORM_BINDINGS.iter().map(|(key, action)| (key.to_string(), *action)))
+    .chain(
+        PLATFORM_BINDINGS
+            .iter()
+            .map(|(key, action)| (key.to_string(), *action)),
+    )
     .map(|(key, action)| (key, action.to_string()))
     .collect()
 }
@@ -310,9 +314,15 @@ impl OpenCADStudio {
         if scene.current_layout == "Model" {
             return Task::none();
         }
-        let viewports: Vec<codec::Handle> =
-            scene.viewport_list().into_iter().map(|vp| vp.handle).collect();
-        let next = match scene.active_viewport.and_then(|h| viewports.iter().position(|v| *v == h)) {
+        let viewports: Vec<codec::Handle> = scene
+            .viewport_list()
+            .into_iter()
+            .map(|vp| vp.handle)
+            .collect();
+        let next = match scene
+            .active_viewport
+            .and_then(|h| viewports.iter().position(|v| *v == h))
+        {
             Some(index) => viewports.get((index + 1) % viewports.len()),
             None => viewports.first(),
         };

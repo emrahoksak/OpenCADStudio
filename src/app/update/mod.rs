@@ -173,7 +173,9 @@ impl OpenCADStudio {
                 return;
             }
         }
-        if self.active_modal == Some(TableStyle) && std::mem::take(&mut self.tablestyle_parent_table) {
+        if self.active_modal == Some(TableStyle)
+            && std::mem::take(&mut self.tablestyle_parent_table)
+        {
             self.return_to_table_insert();
             return;
         }
@@ -253,6 +255,8 @@ impl OpenCADStudio {
             Some(AssocPrompt) => self.mark_assoc_prompted(),
             // Cancel: leave the layer (and its objects) untouched.
             Some(LayerDeleteWarning) => self.layer_delete_pending = None,
+            #[cfg(not(target_arch = "wasm32"))]
+            Some(MetrajDeleteWarning) => self.metraj.pending_delete = None,
             // Cancel: drop the working copy without touching the block.
             Some(AttributeEditor) => {
                 self.attr_editor_handle = None;
@@ -477,7 +481,13 @@ impl OpenCADStudio {
             }
         }
         let from_options = self.active_modal == Some(super::ModalKind::Options);
+        #[cfg(not(target_arch = "wasm32"))]
+        let metraj_click = matches!(msg, Message::ViewportLeftRelease);
         let mut task = self.update_message(msg);
+        #[cfg(not(target_arch = "wasm32"))]
+        self.sync_metraj_geometry();
+        #[cfg(not(target_arch = "wasm32"))]
+        self.sync_metraj_selection(metraj_click);
         if let Some(tab) = self.tabs.get_mut(self.active_tab) {
             let notices = std::mem::take(&mut tab.scene.center_notices);
             for notice in notices {
@@ -604,7 +614,7 @@ impl OpenCADStudio {
         }
     }
 
-    fn update_message(&mut self, msg: Message) -> Task<Message> {
+    pub(in crate::app) fn update_message(&mut self, msg: Message) -> Task<Message> {
         if let Some(tab) = self.tabs.get(self.active_tab) {
             crate::entities::common::set_unit_context(
                 crate::entities::common::UnitContext::from_header(&tab.scene.document.header),
@@ -1951,7 +1961,8 @@ impl OpenCADStudio {
 
             Message::InsertObjectResult(Ok(image)) => {
                 use crate::command::CadCommand;
-                let cmd = crate::modules::draw::draw::raster_image::ImageCommand::new_embedded(image);
+                let cmd =
+                    crate::modules::draw::draw::raster_image::ImageCommand::new_embedded(image);
                 let i = self.active_tab;
                 self.command_line.push_info(&cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(cmd));
@@ -2755,6 +2766,8 @@ impl OpenCADStudio {
             Message::PdfShxDialog(message) => self.update_pdf_shx_dialog(message),
             Message::PcManager(message) => self.update_pc_manager(message),
             Message::Count(message) => self.on_count(message),
+            #[cfg(not(target_arch = "wasm32"))]
+            Message::Metraj(message) => self.on_metraj(message),
             Message::Laywalk(message) => self.on_layer_walk(message),
             Message::QuickCalc(message) => self.on_quick_calc(message),
             Message::SheetSet(message) => self.on_sheet_set(message),
@@ -2922,7 +2935,10 @@ impl OpenCADStudio {
             }
             Message::PluginDialogFilePick(id) => {
                 let (is_save, extensions) = if let Some(state) = &self.plugin_dialog_state {
-                    fn find_fp(ctrls: &[ocs_plugin_api::dialog::DialogControl], target: &str) -> Option<(bool, Vec<String>)> {
+                    fn find_fp(
+                        ctrls: &[ocs_plugin_api::dialog::DialogControl],
+                        target: &str,
+                    ) -> Option<(bool, Vec<String>)> {
                         for c in ctrls {
                             match c {
                                 ocs_plugin_api::dialog::DialogControl::FilePicker {
@@ -2931,9 +2947,13 @@ impl OpenCADStudio {
                                     save,
                                     ..
                                 } if cid == target => return Some((*save, extensions.clone())),
-                                ocs_plugin_api::dialog::DialogControl::Fields { controls, .. }
+                                ocs_plugin_api::dialog::DialogControl::Fields {
+                                    controls, ..
+                                }
                                 | ocs_plugin_api::dialog::DialogControl::Row { controls, .. }
-                                | ocs_plugin_api::dialog::DialogControl::Column { controls, .. } => {
+                                | ocs_plugin_api::dialog::DialogControl::Column {
+                                    controls, ..
+                                } => {
                                     if let Some(res) = find_fp(controls, target) {
                                         return Some(res);
                                     }
@@ -3037,7 +3057,8 @@ impl OpenCADStudio {
                     .get_mut(tab_idx)
                     .and_then(|t| t.active_cmd.as_mut())
                 {
-                    let res = cmd.on_dialog_response(ocs_plugin_api::dialog::DialogResponse::Cancelled);
+                    let res =
+                        cmd.on_dialog_response(ocs_plugin_api::dialog::DialogResponse::Cancelled);
                     let next = if matches!(
                         res,
                         crate::command::CmdResult::CommitAndExit(_)
@@ -3150,27 +3171,47 @@ impl OpenCADStudio {
                 let choice_text = if !text.is_empty() {
                     text
                 } else {
-                    self.plugin_panels.get(&panel_id).and_then(|p| {
-                        fn find_choice(ctrls: &[ocs_plugin_api::dialog::DialogControl], cid: &str, idx: usize) -> Option<String> {
-                            for c in ctrls {
-                                match c {
-                                    ocs_plugin_api::dialog::DialogControl::Choice { id, options, .. } if id == cid => {
-                                        return options.get(idx).cloned();
-                                    }
-                                    ocs_plugin_api::dialog::DialogControl::Fields { controls, .. }
-                                    | ocs_plugin_api::dialog::DialogControl::Row { controls, .. }
-                                    | ocs_plugin_api::dialog::DialogControl::Column { controls, .. } => {
-                                        if let Some(o) = find_choice(controls, cid, idx) {
-                                            return Some(o);
+                    self.plugin_panels
+                        .get(&panel_id)
+                        .and_then(|p| {
+                            fn find_choice(
+                                ctrls: &[ocs_plugin_api::dialog::DialogControl],
+                                cid: &str,
+                                idx: usize,
+                            ) -> Option<String> {
+                                for c in ctrls {
+                                    match c {
+                                        ocs_plugin_api::dialog::DialogControl::Choice {
+                                            id,
+                                            options,
+                                            ..
+                                        } if id == cid => {
+                                            return options.get(idx).cloned();
                                         }
+                                        ocs_plugin_api::dialog::DialogControl::Fields {
+                                            controls,
+                                            ..
+                                        }
+                                        | ocs_plugin_api::dialog::DialogControl::Row {
+                                            controls,
+                                            ..
+                                        }
+                                        | ocs_plugin_api::dialog::DialogControl::Column {
+                                            controls,
+                                            ..
+                                        } => {
+                                            if let Some(o) = find_choice(controls, cid, idx) {
+                                                return Some(o);
+                                            }
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
+                                None
                             }
-                            None
-                        }
-                        find_choice(&p.def.controls, &control_id, index)
-                    }).unwrap_or_default()
+                            find_choice(&p.def.controls, &control_id, index)
+                        })
+                        .unwrap_or_default()
                 };
                 if let Some(panel) = self.plugin_panels.get_mut(&panel_id) {
                     panel.choice_values.insert(control_id.clone(), index);
@@ -3219,15 +3260,26 @@ impl OpenCADStudio {
             Message::PluginPanelTableAddRow(panel_id, table_id) => {
                 let mut current_rows = Vec::new();
                 if let Some(panel) = self.plugin_panels.get_mut(&panel_id) {
-                    fn find_table_cols(ctrls: &[ocs_plugin_api::dialog::DialogControl], target: &str) -> Option<usize> {
+                    fn find_table_cols(
+                        ctrls: &[ocs_plugin_api::dialog::DialogControl],
+                        target: &str,
+                    ) -> Option<usize> {
                         for c in ctrls {
                             match c {
-                                ocs_plugin_api::dialog::DialogControl::Table { id, headers, .. } if id == target => {
+                                ocs_plugin_api::dialog::DialogControl::Table {
+                                    id,
+                                    headers,
+                                    ..
+                                } if id == target => {
                                     return Some(headers.len());
                                 }
-                                ocs_plugin_api::dialog::DialogControl::Fields { controls, .. }
+                                ocs_plugin_api::dialog::DialogControl::Fields {
+                                    controls, ..
+                                }
                                 | ocs_plugin_api::dialog::DialogControl::Row { controls, .. }
-                                | ocs_plugin_api::dialog::DialogControl::Column { controls, .. } => {
+                                | ocs_plugin_api::dialog::DialogControl::Column {
+                                    controls, ..
+                                } => {
                                     if let Some(res) = find_table_cols(controls, target) {
                                         return Some(res);
                                     }
@@ -3564,7 +3616,9 @@ impl OpenCADStudio {
                 let s = if text_with_spaces || !s.contains(['\r', '\n', '\t']) {
                     s
                 } else {
-                    s.replace("\r\n", " ").replace(['\r', '\n'], " ").replace('\t', ",")
+                    s.replace("\r\n", " ")
+                        .replace(['\r', '\n'], " ")
+                        .replace('\t', ",")
                 };
                 let active_prompt = self.tabs[self.active_tab].active_cmd.is_some();
                 let literal = self.command_line.literal_spaces || s.starts_with('>');
@@ -3796,9 +3850,11 @@ impl OpenCADStudio {
                     if self.layer_walk_owns_arrows() {
                         match direction {
                             ArrowKey::Up => {
-                                return self.on_layer_walk(crate::ui::window::layer_walk::LayerWalkMsg::KeyNav {
-                                    up: true,
-                                })
+                                return self.on_layer_walk(
+                                    crate::ui::window::layer_walk::LayerWalkMsg::KeyNav {
+                                        up: true,
+                                    },
+                                )
                             }
                             ArrowKey::Down => {
                                 return self.on_layer_walk(
@@ -3813,7 +3869,8 @@ impl OpenCADStudio {
                     // …or maybe the QuickCalc input, whose ↑/↓ step through
                     // its history.
                     let up = matches!(direction, ArrowKey::Up);
-                    if !self.quick_calc.show || !matches!(direction, ArrowKey::Up | ArrowKey::Down) {
+                    if !self.quick_calc.show || !matches!(direction, ArrowKey::Up | ArrowKey::Down)
+                    {
                         return Task::none();
                     }
                     return iced::widget::operation::is_focused(iced::widget::Id::new(
@@ -4962,6 +5019,13 @@ impl OpenCADStudio {
             }
 
             Message::WindowCloseRequested(id) => {
+                if self.metraj.window == Some(id) {
+                    self.metraj.window = None;
+                    if let Ok(mut active) = super::metraj::METRAJ_WINDOW_ID.lock() {
+                        *active = None;
+                    }
+                    return iced::window::close(id);
+                }
                 if self.main_window == Some(id) {
                     return self.request_quit_with_block_edits();
                 }
@@ -4969,6 +5033,13 @@ impl OpenCADStudio {
             }
 
             Message::OsWindowClosed(id) => {
+                if self.metraj.window == Some(id) {
+                    self.metraj.window = None;
+                    if let Ok(mut active) = super::metraj::METRAJ_WINDOW_ID.lock() {
+                        *active = None;
+                    }
+                    return Task::none();
+                }
                 // Only the main window exists now; all dialogs are in-canvas
                 // modals (Plan B). Closing it exits.
                 if self.main_window == Some(id) {
@@ -5733,6 +5804,13 @@ impl OpenCADStudio {
                 self.ribbon.set_window_size((w, h));
                 Task::none()
             }
+            Message::WindowResizedIn(id, w, h) => {
+                if self.main_window == Some(id) {
+                    self.update(Message::WindowResized(w, h))
+                } else {
+                    Task::none()
+                }
+            }
 
             Message::ViewCubeSnap(region) => self.on_view_cube_snap(region),
             Message::ViewCubeSnapWorld(region) => self.on_view_cube_snap_world(region),
@@ -6349,7 +6427,10 @@ impl OpenCADStudio {
                     return Task::none();
                 }
                 let url = self.hyperlink_editor_url.trim().to_owned();
-                if self.hyperlink_editor_mixed && url.is_empty() && !self.hyperlink_options.view_target {
+                if self.hyperlink_editor_mixed
+                    && url.is_empty()
+                    && !self.hyperlink_options.view_target
+                {
                     self.command_line.push_info(
                         crate::t!("Enter a URL, or use Remove to clear all hyperlinks.").as_ref(),
                     );
@@ -6918,12 +6999,13 @@ impl OpenCADStudio {
                     self.hyperlink_editor_mixed = false;
                     self.hyperlink_editor_dirty = false;
                     self.hyperlink_editor_handles.clear();
-                    self.hyperlink_options = crate::ui::window::hyperlink_dialog::HyperlinkOptions {
-                        edit: !self.hyperlink_editor_url.is_empty(),
-                        dwf: true,
-                        address_only: true,
-                        ..Default::default()
-                    };
+                    self.hyperlink_options =
+                        crate::ui::window::hyperlink_dialog::HyperlinkOptions {
+                            edit: !self.hyperlink_editor_url.is_empty(),
+                            dwf: true,
+                            address_only: true,
+                            ..Default::default()
+                        };
                     self.active_modal = Some(crate::app::ModalKind::Hyperlink);
                 }
                 Task::none()
@@ -7789,34 +7871,50 @@ impl OpenCADStudio {
                             self.tabs[i].dirty = true;
                         }
                     }
-                    _ => self.command_line.push_error(
-                        crate::t!("Cannot set TEXTSIZE to that value.").as_ref(),
-                    ),
+                    _ => self
+                        .command_line
+                        .push_error(crate::t!("Cannot set TEXTSIZE to that value.").as_ref()),
                 }
                 self.sync_frame_dropdown();
                 Task::none()
             }
-            Message::RibbonTextHeightFocus => iced::widget::operation::focus(iced::widget::Id::new(
-                crate::ui::ribbon::widgets::TEXT_HEIGHT_ID,
-            )),
+            Message::RibbonTextHeightFocus => iced::widget::operation::focus(
+                iced::widget::Id::new(crate::ui::ribbon::widgets::TEXT_HEIGHT_ID),
+            ),
             Message::RibbonDimLayer(layer) => {
                 self.ribbon.close_dropdown();
-                let value = if layer.is_empty() { ".".to_string() } else { layer };
+                let value = if layer.is_empty() {
+                    ".".to_string()
+                } else {
+                    layer
+                };
                 self.dispatch_command(&format!("DIMLAYER {value}"))
             }
             Message::RibbonMLeaderLayer(layer) => {
                 self.ribbon.close_dropdown();
-                let value = if layer.is_empty() { ".".to_string() } else { layer };
+                let value = if layer.is_empty() {
+                    ".".to_string()
+                } else {
+                    layer
+                };
                 self.dispatch_command(&format!("MLEADERLAYER {value}"))
             }
             Message::RibbonCenterLayer(layer) => {
                 self.ribbon.close_dropdown();
-                let value = if layer.is_empty() { ".".to_string() } else { layer };
+                let value = if layer.is_empty() {
+                    ".".to_string()
+                } else {
+                    layer
+                };
                 self.dispatch_command(&format!("CENTERLAYER {value}"))
             }
             Message::RibbonTextLayer(layer) => {
                 self.ribbon.close_dropdown();
-                let value = if layer.is_empty() { ".".to_string() } else { layer };
+                let value = if layer.is_empty() {
+                    ".".to_string()
+                } else {
+                    layer
+                };
                 self.dispatch_command(&format!("TEXTLAYER {value}"))
             }
             Message::XrefFadeToggle => {
@@ -7890,6 +7988,10 @@ impl OpenCADStudio {
                 if !handles.is_empty() {
                     // Erase is delta-safe unless a target is in a group (group
                     // cleanup rewrites document.objects).
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if self.request_metraj_delete(&handles, false) {
+                        return Task::none();
+                    }
                     let delta_safe = self.delta_erase_safe(i, &handles);
                     let pending = self.begin_undo(i, "ERASE", handles.len(), delta_safe);
                     // Stash the erased entities so OOPS can restore them.
@@ -7922,8 +8024,13 @@ impl OpenCADStudio {
                 // without waiting for the next mouse move.
                 let i = self.active_tab;
                 if ctrl_changed && self.tabs[i].active_cmd.is_some() {
-                    if ctrl && self.tabs[i].active_cmd.as_mut().is_some_and(|command| command.cycle_insertion_point()) {
-                        if let Some(command)=self.tabs[i].active_cmd.as_ref() {
+                    if ctrl
+                        && self.tabs[i]
+                            .active_cmd
+                            .as_mut()
+                            .is_some_and(|command| command.cycle_insertion_point())
+                    {
+                        if let Some(command) = self.tabs[i].active_cmd.as_ref() {
                             self.command_line.push_info(&command.prompt());
                         }
                         self.refresh_active_cmd_preview(i);
@@ -9158,7 +9265,10 @@ impl OpenCADStudio {
             Message::PropGeomCommit(field) => self.on_prop_geom_commit(field),
             Message::PropBlockInput { key, value } => {
                 if self.block_property_target_is_current(key) {
-                    self.tabs[self.active_tab].properties.edit_buf.insert(crate::ui::properties::FieldKey::BlockParameter(key), value);
+                    self.tabs[self.active_tab]
+                        .properties
+                        .edit_buf
+                        .insert(crate::ui::properties::FieldKey::BlockParameter(key), value);
                 }
                 Task::none()
             }
@@ -9198,7 +9308,6 @@ impl OpenCADStudio {
                 self.block_picker_dismissed = true;
                 Task::none()
             }
-
 
             Message::PropGroupToggle(key) => {
                 let panel = &mut self.tabs[self.active_tab].properties;
@@ -10163,52 +10272,87 @@ impl OpenCADStudio {
             }
             Message::BlockCycleSelect(index) => {
                 if let Some(state) = self.block_cycle_order.as_mut() {
-                    if index < state.rows.len() { state.selected = Some(index); }
+                    if index < state.rows.len() {
+                        state.selected = Some(index);
+                    }
                 }
                 Task::none()
             }
             Message::BlockCycleEnable(index, enabled) => {
-                if let Some(state)=self.block_cycle_order.as_mut() {
-                    if let Some(row)=state.rows.get_mut(index) { row.enabled=enabled; state.selected=Some(index); }
-                    state.error=None;
+                if let Some(state) = self.block_cycle_order.as_mut() {
+                    if let Some(row) = state.rows.get_mut(index) {
+                        row.enabled = enabled;
+                        state.selected = Some(index);
+                    }
+                    state.error = None;
                 }
                 Task::none()
             }
             Message::BlockCycleMove(index, up) => {
-                if let Some(state)=self.block_cycle_order.as_mut() {
-                    let target=if up { index.checked_sub(1) } else { index.checked_add(1) };
-                    if let Some(target)=target.filter(|target| *target<state.rows.len() && index<state.rows.len()) {
-                        state.rows.swap(index,target);
+                if let Some(state) = self.block_cycle_order.as_mut() {
+                    let target = if up {
+                        index.checked_sub(1)
+                    } else {
+                        index.checked_add(1)
+                    };
+                    if let Some(target) = target
+                        .filter(|target| *target < state.rows.len() && index < state.rows.len())
+                    {
+                        state.rows.swap(index, target);
                         state.selected = state.selected.map(|selected| {
-                            if selected == index { target } else if selected == target { index } else { selected }
+                            if selected == index {
+                                target
+                            } else if selected == target {
+                                index
+                            } else {
+                                selected
+                            }
                         });
-                        state.error=None;
+                        state.error = None;
                     }
                 }
                 Task::none()
             }
             Message::BlockCycleApply => self.apply_block_cycle_order(),
-            Message::BlockActionBarSelect(handle) => self.handle_action_bar(handle,false),
-            Message::BlockActionBarEdit(handle) => self.handle_action_bar(handle,true),
-            Message::BlockActionBarMove(handle,offset) => { self.move_action_bar(handle,offset); Task::none() }
+            Message::BlockActionBarSelect(handle) => self.handle_action_bar(handle, false),
+            Message::BlockActionBarEdit(handle) => self.handle_action_bar(handle, true),
+            Message::BlockActionBarMove(handle, offset) => {
+                self.move_action_bar(handle, offset);
+                Task::none()
+            }
             Message::BlockActionBarHide(handle) => {
-                let i=self.active_tab;
-                if self.action_bar_error().is_none() && self.tabs[i].active_cmd.is_none()
-                    && self.tabs[i].active_block_edit_session().is_some_and(|session| crate::scene::block_action_bars::groups(&self.tabs[i].scene.document,session.br_handle).iter().any(|group| group.parameter==handle)) {
+                let i = self.active_tab;
+                if self.action_bar_error().is_none()
+                    && self.tabs[i].active_cmd.is_none()
+                    && self.tabs[i]
+                        .active_block_edit_session()
+                        .is_some_and(|session| {
+                            crate::scene::block_action_bars::groups(
+                                &self.tabs[i].scene.document,
+                                session.br_handle,
+                            )
+                            .iter()
+                            .any(|group| group.parameter == handle)
+                        })
+                {
                     self.tabs[i].action_bars.hidden.insert(handle);
                 }
                 Task::none()
             }
             Message::BlockEditorSettingsInput(index, value) => {
                 if let Some(state) = &mut self.block_editor_settings {
-                    if let Some(field) = state.values.get_mut(index) { *field = value; }
+                    if let Some(field) = state.values.get_mut(index) {
+                        *field = value;
+                    }
                     state.error = None;
                 }
                 Task::none()
             }
             Message::BlockConstraintColorInput(index, value) => {
                 if let Some(state) = &mut self.block_editor_settings {
-                    if let Some(color) = state.constraint_colors.get_mut(index) { *color = value; }
+                    if let Some(color) = state.constraint_colors.get_mut(index) {
+                        *color = value;
+                    }
                     state.error = None;
                 }
                 Task::none()
@@ -10216,7 +10360,10 @@ impl OpenCADStudio {
             Message::ToggleBlockConstraintStatus => self.dispatch_command("BCONSTATUSMODE TOGGLE"),
             Message::BlockEditorSettingsReset => {
                 if self.block_editor_settings.is_some() {
-                    self.block_editor_settings = Some(crate::ui::window::block_editor_settings::State::new(&super::settings::BlockEditorPreferences::default()));
+                    self.block_editor_settings =
+                        Some(crate::ui::window::block_editor_settings::State::new(
+                            &super::settings::BlockEditorPreferences::default(),
+                        ));
                 }
                 Task::none()
             }
@@ -10224,7 +10371,10 @@ impl OpenCADStudio {
                 if self.active_modal == Some(super::ModalKind::BlockEditorSettings) {
                     if let Some(state) = &mut self.block_editor_settings {
                         let mut staged = self.block_editor_preferences.clone();
-                        for ((name, _), value) in super::settings::BLOCK_DISPLAY_VARIABLES.iter().zip(&state.values) {
+                        for ((name, _), value) in super::settings::BLOCK_DISPLAY_VARIABLES
+                            .iter()
+                            .zip(&state.values)
+                        {
                             if let Err(error) = staged.set_display_variable(name, value) {
                                 state.error = Some(format!("{name}: {}", crate::t!(error)));
                                 return Task::none();
@@ -10232,7 +10382,9 @@ impl OpenCADStudio {
                         }
                         for (index, value) in state.constraint_colors.iter().enumerate() {
                             let normalized = crate::ui::overlay::authoring::normalize_color(value);
-                            let Some(color) = normalized.filter(|value| value != "BYLAYER" && value != "BYBLOCK") else {
+                            let Some(color) =
+                                normalized.filter(|value| value != "BYLAYER" && value != "BYBLOCK")
+                            else {
                                 state.error = Some(crate::t!("Constraint colors require an index from 1 to 255 or RGB:r,g,b.").into_owned());
                                 return Task::none();
                             };
@@ -10380,8 +10532,10 @@ impl OpenCADStudio {
             }
 
             Message::ApertureChanged(value) => {
-                self.snapper.osnap_radius_px = (value as f32)
-                    .clamp(crate::snap::MIN_OSNAP_RADIUS_PX, crate::snap::MAX_OSNAP_RADIUS_PX);
+                self.snapper.osnap_radius_px = (value as f32).clamp(
+                    crate::snap::MIN_OSNAP_RADIUS_PX,
+                    crate::snap::MAX_OSNAP_RADIUS_PX,
+                );
                 self.persist_settings_if_changed();
                 Task::none()
             }
@@ -13100,8 +13254,7 @@ impl OpenCADStudio {
                             s.true_type_font_flags ^= crate::entities::text_support::TTF_FLAG_BOLD
                         }
                         "italic" => {
-                            s.true_type_font_flags ^=
-                                crate::entities::text_support::TTF_FLAG_ITALIC
+                            s.true_type_font_flags ^= crate::entities::text_support::TTF_FLAG_ITALIC
                         }
                         _ => {}
                     }
@@ -14332,7 +14485,10 @@ mod free_text_entry_tests {
             .entities()
             .find_map(|entity| match entity {
                 codec::EntityType::LwPolyline(p) => Some(
-                    p.vertices.iter().map(|v| (v.location.x, v.location.y)).collect(),
+                    p.vertices
+                        .iter()
+                        .map(|v| (v.location.x, v.location.y))
+                        .collect(),
                 ),
                 _ => None,
             })

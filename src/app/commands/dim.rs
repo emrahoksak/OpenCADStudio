@@ -1248,7 +1248,9 @@ impl OpenCADStudio {
                     entities.iter().map(|(handle, _)| *handle).collect();
                 for handle in self.tabs[i].scene.visible_hatch_handles_for_edit() {
                     if seen.insert(handle) {
-                        if let Some(entity) = self.tabs[i].scene.document.get_entity(handle).cloned() {
+                        if let Some(entity) =
+                            self.tabs[i].scene.document.get_entity(handle).cloned()
+                        {
                             entities.push((handle, entity));
                         }
                     }
@@ -1264,11 +1266,9 @@ impl OpenCADStudio {
                     .map(|(handle, _)| handle)
                     .collect();
                 let all_entities: Vec<_> = entities.into_iter().map(|(_, e)| e).collect();
-                let visible_inserts = self.tabs[i]
-                    .scene
-                    .visible_entities_for_edit(|entity| {
-                        matches!(entity, codec::EntityType::Insert(_))
-                    });
+                let visible_inserts = self.tabs[i].scene.visible_entities_for_edit(|entity| {
+                    matches!(entity, codec::EntityType::Insert(_))
+                });
                 let document = &self.tabs[i].scene.document;
                 let block_boundaries = visible_inserts
                     .into_iter()
@@ -1282,9 +1282,7 @@ impl OpenCADStudio {
                             .explode(&children)
                             .into_iter()
                             .filter(|child| {
-                                !crate::scene::block_construction::is_construction(
-                                    child.common(),
-                                )
+                                !crate::scene::block_construction::is_construction(child.common())
                             })
                             .collect();
                         Some((handle, pieces))
@@ -1301,7 +1299,9 @@ impl OpenCADStudio {
 
             "EXTRIM" => {
                 use crate::modules::draw::modify::trim::{is_trim_boundary_entity, ExtrimCommand};
-                let all = self.tabs[i].scene.visible_entities_for_edit(is_trim_boundary_entity);
+                let all = self.tabs[i]
+                    .scene
+                    .visible_entities_for_edit(is_trim_boundary_entity);
                 let new_cmd = ExtrimCommand::new(all);
                 self.command_line.push_info(&new_cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(new_cmd));
@@ -1309,8 +1309,9 @@ impl OpenCADStudio {
 
             "EXTEND" => {
                 use crate::modules::draw::modify::trim::{is_trim_boundary_entity, ExtendCommand};
-                let entities =
-                    self.tabs[i].scene.visible_entities_for_edit(is_trim_boundary_entity);
+                let entities = self.tabs[i]
+                    .scene
+                    .visible_entities_for_edit(is_trim_boundary_entity);
                 let initial_edges: Vec<codec::Handle> = self.tabs[i]
                     .scene
                     .selected_entities()
@@ -1619,7 +1620,11 @@ impl OpenCADStudio {
                             "Select objects or [Disassociated]:",
                             "Disassociated",
                             "D",
-                            || crate::command::CmdResult::Dispatch("_DIMREASSOCIATE_DISASSOCIATED".into()),
+                            || {
+                                crate::command::CmdResult::Dispatch(
+                                    "_DIMREASSOCIATE_DISASSOCIATED".into(),
+                                )
+                            },
                         )
                     };
                     self.command_line.push_info(&sel.prompt());

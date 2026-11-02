@@ -1293,7 +1293,10 @@ impl<'a> HostSession<'a> {
         request["fields"] = serde_json::json!([]);
         let answer = self.app.entity_query(self.tab, &request);
         if answer["ok"] != true {
-            return Err(answer["error"].as_str().unwrap_or("query failed").to_owned());
+            return Err(answer["error"]
+                .as_str()
+                .unwrap_or("query failed")
+                .to_owned());
         }
         let entities = answer["entities"]
             .as_array()
@@ -3564,11 +3567,13 @@ impl<'a> HostSession<'a> {
         for handle in &handles {
             // Designation one-by-one inside the SAME scope, with the
             // before-image pending-scoped the way set_reference_only does.
-            let before = self.app.tabs[self.tab].scene.reference_only.is_marked(*handle);
+            let before = self.app.tabs[self.tab]
+                .scene
+                .reference_only
+                .is_marked(*handle);
             self.app
                 .record_reference_designation_before_pending(self.tab, *handle, before);
-            self.app
-                .tabs[self.tab]
+            self.app.tabs[self.tab]
                 .scene
                 .set_reference_only_membership(*handle, true);
         }
@@ -3711,9 +3716,8 @@ impl<'a> HostSession<'a> {
         // plugin kind lands here as a compile-time arm, never as a guess.
         let (entities, _carriers) = match &instance.design {
             ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(chain) => {
-                crate::parametric::build_display_entities(chain, instance.tolerance).map_err(
-                    |e| format!("instance of class {:?}: {e}", instance.class_id),
-                )?
+                crate::parametric::build_display_entities(chain, instance.tolerance)
+                    .map_err(|e| format!("instance of class {:?}: {e}", instance.class_id))?
             }
         };
         if entities.is_empty() {
@@ -3741,11 +3745,13 @@ impl<'a> HostSession<'a> {
             self.write_record(*handle, stamp);
             // Designation inside the SAME scope, the before-image
             // pending-scoped the way set_reference_only does.
-            let before = self.app.tabs[self.tab].scene.reference_only.is_marked(*handle);
+            let before = self.app.tabs[self.tab]
+                .scene
+                .reference_only
+                .is_marked(*handle);
             self.app
                 .record_reference_designation_before_pending(self.tab, *handle, before);
-            self.app
-                .tabs[self.tab]
+            self.app.tabs[self.tab]
                 .scene
                 .set_reference_only_membership(*handle, true);
         }
@@ -4507,10 +4513,7 @@ impl HostApi for HostSession<'_> {
     fn end_undo_group(&mut self) {
         self.end_undo_group()
     }
-    fn query_entities(
-        &mut self,
-        query: &str,
-    ) -> Result<ocs_plugin_api::host::EntityPage, String> {
+    fn query_entities(&mut self, query: &str) -> Result<ocs_plugin_api::host::EntityPage, String> {
         self.query_entities(query)
     }
     fn set_dirty(&mut self) {
@@ -4724,7 +4727,10 @@ impl HostApi for HostSession<'_> {
         self.plugin_class_instance_properties(handle)
     }
 
-    fn show_dialog(&mut self, dialog: ocs_plugin_api::dialog::DialogDef) -> ocs_plugin_api::dialog::DialogResponse {
+    fn show_dialog(
+        &mut self,
+        dialog: ocs_plugin_api::dialog::DialogDef,
+    ) -> ocs_plugin_api::dialog::DialogResponse {
         self.app.open_plugin_dialog(dialog);
         ocs_plugin_api::dialog::DialogResponse::Cancelled
     }
@@ -4742,7 +4748,9 @@ impl HostApi for HostSession<'_> {
 
         let panel_enum = crate::ui::dock::PanelId::Plugin(num);
         if self.app.dock.location(panel_enum).is_none() {
-            self.app.dock.dock(panel_enum, crate::app::config::DockSide::Right, usize::MAX);
+            self.app
+                .dock
+                .dock(panel_enum, crate::app::config::DockSide::Right, usize::MAX);
         }
         if let Some(w) = panel.width {
             let mut panel_settings = self.app.dock.settings(panel_enum);
@@ -4777,7 +4785,12 @@ impl HostApi for HostSession<'_> {
             return true;
         }
         let lower = panel_id.to_lowercase();
-        if let Some((_, panel)) = self.app.plugin_panels.iter_mut().find(|(k, _)| k.to_lowercase() == lower) {
+        if let Some((_, panel)) = self
+            .app
+            .plugin_panels
+            .iter_mut()
+            .find(|(k, _)| k.to_lowercase() == lower)
+        {
             panel.update_values(values);
             return true;
         }
@@ -4789,25 +4802,42 @@ impl HostApi for HostSession<'_> {
         } else {
             let lower = panel_id.to_lowercase();
             let stripped = lower.replace([' ', '_', '-'], "");
-            self.app.plugin_panel_ids.keys().find(|k| {
-                k.to_lowercase() == lower || k.replace([' ', '_', '-'], "").to_lowercase() == stripped
-            }).cloned().or_else(|| {
-                self.app.plugin_panels.iter().find(|(k, state)| {
+            self.app
+                .plugin_panel_ids
+                .keys()
+                .find(|k| {
                     k.to_lowercase() == lower
                         || k.replace([' ', '_', '-'], "").to_lowercase() == stripped
-                        || state.def.title.to_lowercase() == lower
-                        || state.def.title.replace([' ', '_', '-'], "").to_lowercase() == stripped
-                        || state.def.command.as_ref().is_some_and(|c| {
-                            c.to_lowercase() == lower || c.replace([' ', '_', '-'], "").to_lowercase() == stripped
+                })
+                .cloned()
+                .or_else(|| {
+                    self.app
+                        .plugin_panels
+                        .iter()
+                        .find(|(k, state)| {
+                            k.to_lowercase() == lower
+                                || k.replace([' ', '_', '-'], "").to_lowercase() == stripped
+                                || state.def.title.to_lowercase() == lower
+                                || state.def.title.replace([' ', '_', '-'], "").to_lowercase()
+                                    == stripped
+                                || state.def.command.as_ref().is_some_and(|c| {
+                                    c.to_lowercase() == lower
+                                        || c.replace([' ', '_', '-'], "").to_lowercase() == stripped
+                                })
                         })
-                }).map(|(k, _)| k.clone())
-            })
+                        .map(|(k, _)| k.clone())
+                })
         };
 
         if let Some(ref id) = matched_id {
             if let Some(&num) = self.app.plugin_panel_ids.get(id) {
                 let panel_enum = crate::ui::dock::PanelId::Plugin(num);
-                let is_currently_open = self.app.plugin_panels.get(id).map(|p| p.visible).unwrap_or(false);
+                let is_currently_open = self
+                    .app
+                    .plugin_panels
+                    .get(id)
+                    .map(|p| p.visible)
+                    .unwrap_or(false);
 
                 let new_visible = if let Some(s) = show {
                     s
@@ -4821,7 +4851,11 @@ impl HostApi for HostSession<'_> {
 
                 if new_visible {
                     if self.app.dock.location(panel_enum).is_none() {
-                        self.app.dock.dock(panel_enum, crate::app::config::DockSide::Right, usize::MAX);
+                        self.app.dock.dock(
+                            panel_enum,
+                            crate::app::config::DockSide::Right,
+                            usize::MAX,
+                        );
                     }
                     self.app.dock_reveal(panel_enum);
                 } else {
@@ -4831,7 +4865,6 @@ impl HostApi for HostSession<'_> {
             }
         }
         false
-
     }
 }
 
@@ -4916,26 +4949,37 @@ impl crate::command::CadCommand for PluginInteractiveAdapter {
         .unwrap_or(crate::command::CmdResult::Cancel)
     }
     fn selection_rejects_locked_layers(&self) -> bool {
-        crate::plugin::guard("InteractiveCommand::selection_rejects_locked_layers", || {
-            self.inner.selection_rejects_locked_layers()
-        })
+        crate::plugin::guard(
+            "InteractiveCommand::selection_rejects_locked_layers",
+            || self.inner.selection_rejects_locked_layers(),
+        )
         .unwrap_or(false)
     }
     fn entity_pick_highlights_hover(&self) -> bool {
         self.needs_entity_pick() || self.is_selection_gathering()
     }
     fn modal_dialog(&self) -> Option<ocs_plugin_api::dialog::DialogDef> {
-        crate::plugin::guard("InteractiveCommand::modal_dialog", || self.inner.modal_dialog())
-            .unwrap_or(None)
+        crate::plugin::guard("InteractiveCommand::modal_dialog", || {
+            self.inner.modal_dialog()
+        })
+        .unwrap_or(None)
     }
-    fn on_dialog_response(&mut self, response: ocs_plugin_api::dialog::DialogResponse) -> crate::command::CmdResult {
+    fn on_dialog_response(
+        &mut self,
+        response: ocs_plugin_api::dialog::DialogResponse,
+    ) -> crate::command::CmdResult {
         crate::plugin::guard("InteractiveCommand::on_dialog_response", || {
             self.inner.on_dialog_response(response)
         })
         .map(plugin_step_to_result)
         .unwrap_or(crate::command::CmdResult::Cancel)
     }
-    fn take_pending_panel_updates(&mut self) -> Vec<(String, std::collections::HashMap<String, ocs_plugin_api::dialog::DialogValue>)> {
+    fn take_pending_panel_updates(
+        &mut self,
+    ) -> Vec<(
+        String,
+        std::collections::HashMap<String, ocs_plugin_api::dialog::DialogValue>,
+    )> {
         crate::plugin::guard("InteractiveCommand::take_pending_panel_updates", || {
             self.inner.take_pending_panel_updates()
         })
@@ -4967,7 +5011,8 @@ impl PluginProcessInteractiveAdapter {
         let needs_entity_pick = process.needs_entity_pick(command_id).ok();
         let is_selection_gathering = process.is_selection_gathering(command_id).ok();
         let accepts_drag_selection = process.accepts_drag_selection(command_id).ok();
-        let selection_rejects_locked_layers = process.selection_rejects_locked_layers(command_id).ok();
+        let selection_rejects_locked_layers =
+            process.selection_rejects_locked_layers(command_id).ok();
         Self {
             process,
             command_id,
@@ -4985,7 +5030,10 @@ impl PluginProcessInteractiveAdapter {
         self.needs_entity_pick = self.process.needs_entity_pick(self.command_id).ok();
         self.is_selection_gathering = self.process.is_selection_gathering(self.command_id).ok();
         self.accepts_drag_selection = self.process.accepts_drag_selection(self.command_id).ok();
-        self.selection_rejects_locked_layers = self.process.selection_rejects_locked_layers(self.command_id).ok();
+        self.selection_rejects_locked_layers = self
+            .process
+            .selection_rejects_locked_layers(self.command_id)
+            .ok();
     }
 
     fn cancel(&mut self) {
@@ -5117,7 +5165,10 @@ impl crate::command::CadCommand for PluginProcessInteractiveAdapter {
         use ocs_plugin_api::ipc::protocol::InteractiveEvent;
         let result = self
             .process
-            .interactive_event(self.command_id, InteractiveEvent::SelectionComplete(handles))
+            .interactive_event(
+                self.command_id,
+                InteractiveEvent::SelectionComplete(handles),
+            )
             .map(plugin_step_to_result)
             .unwrap_or(crate::command::CmdResult::Cancel);
         if matches!(
@@ -5141,9 +5192,15 @@ impl crate::command::CadCommand for PluginProcessInteractiveAdapter {
         self.selection_rejects_locked_layers.unwrap_or(false)
     }
     fn modal_dialog(&self) -> Option<ocs_plugin_api::dialog::DialogDef> {
-        self.process.get_modal_dialog(self.command_id).ok().flatten()
+        self.process
+            .get_modal_dialog(self.command_id)
+            .ok()
+            .flatten()
     }
-    fn on_dialog_response(&mut self, response: ocs_plugin_api::dialog::DialogResponse) -> crate::command::CmdResult {
+    fn on_dialog_response(
+        &mut self,
+        response: ocs_plugin_api::dialog::DialogResponse,
+    ) -> crate::command::CmdResult {
         use ocs_plugin_api::ipc::protocol::InteractiveEvent;
         let result = self
             .process
@@ -5489,11 +5546,13 @@ mod tests {
 
         // Create seeds the namespace: the dictionary chain is auto-created and
         // reading returns the entries verbatim.
-        let alpha = host.create_xrecord(&["PLUGIN"], "alpha", entries()).unwrap();
+        let alpha = host
+            .create_xrecord(&["PLUGIN"], "alpha", entries())
+            .unwrap();
         assert!(!alpha.is_null());
         assert_eq!(host.read_xrecord(&["PLUGIN"], "alpha").unwrap(), entries());
         // Dictionary lookup is case-insensitive, both for the path …
-assert_eq!(host.read_xrecord(&["plugin"], "alpha").unwrap(), entries());
+        assert_eq!(host.read_xrecord(&["plugin"], "alpha").unwrap(), entries());
         // â€¦ and re-creating an existing name is refused without any change.
         assert!(host
             .create_xrecord(&["plugin"], "ALPHA", entries())
@@ -7549,20 +7608,19 @@ assert_eq!(host.read_xrecord(&["plugin"], "alpha").unwrap(), entries());
         assert!(created_mline.vertices.iter().all(|vertex| {
             (vertex.direction.x - 1.0).abs() < 1e-9 && (vertex.miter.y.abs() - 1.0).abs() < 1e-9
         }));
-        let assert_lines =
-            |entity: &EntityType, document: &Document, expected_vertices: usize| {
-                let EntityType::MLine(mline) = entity else {
-                    panic!("expected MLine")
-                };
-                assert_eq!(mline.vertices.len(), expected_vertices);
-                let lines = crate::entities::mline::mline_lines(mline, document);
-                assert!(lines.len() >= 2, "expected styled element lines");
-                assert!(lines
-                    .iter()
-                    .flat_map(|line| &line.points)
-                    .flatten()
-                    .all(|v| v.is_finite()));
+        let assert_lines = |entity: &EntityType, document: &Document, expected_vertices: usize| {
+            let EntityType::MLine(mline) = entity else {
+                panic!("expected MLine")
             };
+            assert_eq!(mline.vertices.len(), expected_vertices);
+            let lines = crate::entities::mline::mline_lines(mline, document);
+            assert!(lines.len() >= 2, "expected styled element lines");
+            assert!(lines
+                .iter()
+                .flat_map(|line| &line.points)
+                .flatten()
+                .all(|v| v.is_finite()));
+        };
         assert_lines(&created, host.document(), 2);
 
         let script = std::env::temp_dir().join(format!("ocs_mline_edit_{}.py", std::process::id()));
@@ -11098,9 +11156,8 @@ assert_eq!(host.read_xrecord(&["plugin"], "alpha").unwrap(), entries());
             }
             other => panic!("no surface or solid {handle:?}: {other:?}"),
         };
-        let extent_in = |document: &Document, handle: Handle| {
-            sm::extent(&body_of(document, handle)).unwrap()
-        };
+        let extent_in =
+            |document: &Document, handle: Handle| sm::extent(&body_of(document, handle)).unwrap();
         let close = |a: f64, b: f64| (a - b).abs() < 1e-6;
         let kind_in = |document: &Document, handle: Handle| match document.get_entity(handle) {
             Some(EntityType::Surface(s)) => s.kind,
@@ -11479,9 +11536,8 @@ assert_eq!(host.read_xrecord(&["plugin"], "alpha").unwrap(), entries());
         };
         let volume_in =
             |document: &Document, handle: Handle| sm::volume(&body_in(document, handle));
-        let extent_in = |document: &Document, handle: Handle| {
-            sm::extent(&body_in(document, handle)).unwrap()
-        };
+        let extent_in =
+            |document: &Document, handle: Handle| sm::extent(&body_in(document, handle)).unwrap();
         let close = |a: f64, b: f64| (a - b).abs() < 1e-6 * b.abs().max(1.0);
 
         // C: all three operations on two overlapping boxes, keeping the
@@ -15787,7 +15843,11 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         app.tabs[0].is_start = false;
 
         // Verify DYNAMIC_PLUGIN_LINES does not exist initially
-        assert!(!app.tabs[0].scene.document.layers.contains("DYNAMIC_PLUGIN_LINES"));
+        assert!(!app.tabs[0]
+            .scene
+            .document
+            .layers
+            .contains("DYNAMIC_PLUGIN_LINES"));
         assert!(!app
             .ribbon
             .layer_infos
@@ -15804,7 +15864,11 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         }
 
         // Verify layer is created in document AND refreshed in ribbon + layer panel
-        assert!(app.tabs[0].scene.document.layers.contains("DYNAMIC_PLUGIN_LINES"));
+        assert!(app.tabs[0]
+            .scene
+            .document
+            .layers
+            .contains("DYNAMIC_PLUGIN_LINES"));
         assert!(
             app.ribbon
                 .layer_infos
@@ -16089,12 +16153,21 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         let mut app = OpenCADStudio::new_for_test();
         app.tabs[0].is_start = false;
         let mut host = HostSession::new(&mut app, 0);
-        let not_owner = host.register_plugin_class("ghost", &traverse_class()).unwrap_err();
-        assert!(not_owner.contains("not a loaded, alive plugin"), "got: {not_owner}");
+        let not_owner = host
+            .register_plugin_class("ghost", &traverse_class())
+            .unwrap_err();
+        assert!(
+            not_owner.contains("not a loaded, alive plugin"),
+            "got: {not_owner}"
+        );
         install_class_owner();
         // Register, then re-register identical: idempotent, still one entry.
-        assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
-        assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+        assert!(host
+            .register_plugin_class("PLUGIN", &traverse_class())
+            .is_ok());
+        assert!(host
+            .register_plugin_class("PLUGIN", &traverse_class())
+            .is_ok());
         assert_eq!(host.app.tabs[0].plugin_classes.total(), 1);
         // A different schema refuses without touching the live class.
         let mut bumped = traverse_class();
@@ -16102,7 +16175,11 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         let err = host.register_plugin_class("PLUGIN", &bumped).unwrap_err();
         assert!(err.contains("different schema"), "got: {err}");
         assert_eq!(
-            host.app.tabs[0].plugin_classes.find("PLUGIN", "PLUGIN_ALIGN_DISPLAY").expect("live entry").schema_version,
+            host.app.tabs[0]
+                .plugin_classes
+                .find("PLUGIN", "PLUGIN_ALIGN_DISPLAY")
+                .expect("live entry")
+                .schema_version,
             4
         );
         // Malformed declarations refuse: empty identity, unnamed grip
@@ -16114,11 +16191,12 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         unnamed.grip_schema[0].param_name = String::new();
         assert!(host.register_plugin_class("PLUGIN", &unnamed).is_err());
         let mut dup = traverse_class();
-        dup.grip_schema.push(ocs_plugin_api::host::PluginGripSchemaEntry {
-            grip_id: 1,
-            param_name: "other".to_string(),
-            drives: None,
-        });
+        dup.grip_schema
+            .push(ocs_plugin_api::host::PluginGripSchemaEntry {
+                grip_id: 1,
+                param_name: "other".to_string(),
+                drives: None,
+            });
         assert!(host.register_plugin_class("PLUGIN", &dup).is_err());
         assert_eq!(host.app.tabs[0].plugin_classes.total(), 1);
     }
@@ -16133,7 +16211,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         install_class_owner();
         {
             let mut host = HostSession::new(&mut app, 0);
-            assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+            assert!(host
+                .register_plugin_class("PLUGIN", &traverse_class())
+                .is_ok());
         }
         // Session B: a DIFFERENT HostSession over the same tab (the IPC
         // server's per-request reality) stages the instance.
@@ -16151,7 +16231,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         app.tabs[0].is_start = false;
         install_class_owner();
         let mut host = HostSession::new(&mut app, 0);
-        assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+        assert!(host
+            .register_plugin_class("PLUGIN", &traverse_class())
+            .is_ok());
         // Another alive plugin sees the class but cannot stage it.
         crate::plugin::grip_points::install_in_process_sink("PLUGIN_RIVAL", |_host, _event| {
             ocs_plugin_api::host::CustomGripResponse::default()
@@ -16173,7 +16255,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         let handles;
         {
             let mut host = HostSession::new(&mut app, 0);
-            assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+            assert!(host
+                .register_plugin_class("PLUGIN", &traverse_class())
+                .is_ok());
             handles = host
                 .stage_plugin_class_instance("PLUGIN", &instance)
                 .expect("the class instance stages");
@@ -16228,7 +16312,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         let handles;
         {
             let mut host = HostSession::new(&mut app, 0);
-            assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+            assert!(host
+                .register_plugin_class("PLUGIN", &traverse_class())
+                .is_ok());
             handles = host
                 .stage_plugin_class_instance("PLUGIN", &traverse_instance())
                 .expect("the class instance stages");
@@ -16253,7 +16339,10 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             name: &str,
         ) {
             let (bytes, losses) = format.write(document).unwrap();
-            assert!(losses.is_empty(), "{name} write must not lose anything: {losses:?}");
+            assert!(
+                losses.is_empty(),
+                "{name} write must not lose anything: {losses:?}"
+            );
             let (back, read_losses) = format.read(&bytes).unwrap();
             assert!(
                 read_losses.is_empty(),
@@ -16268,8 +16357,20 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                 );
             }
         }
-        round_trip(&Dxf, &app.tabs[0].scene.document, &handles, &read_stamp, "DXF");
-        round_trip(&Dwg, &app.tabs[0].scene.document, &handles, &read_stamp, "DWG");
+        round_trip(
+            &Dxf,
+            &app.tabs[0].scene.document,
+            &handles,
+            &read_stamp,
+            "DXF",
+        );
+        round_trip(
+            &Dwg,
+            &app.tabs[0].scene.document,
+            &handles,
+            &read_stamp,
+            "DWG",
+        );
     }
 
     #[test]
@@ -16278,7 +16379,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         app.tabs[0].is_start = false;
         install_class_owner();
         let mut host = HostSession::new(&mut app, 0);
-        assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+        assert!(host
+            .register_plugin_class("PLUGIN", &traverse_class())
+            .is_ok());
         let epoch_before = host.app.tabs[0].scene.geometry_epoch;
         // Unregistered class.
         let mut ghost = traverse_instance();
@@ -16287,7 +16390,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         // Schema version mismatch.
         let mut mismatch = traverse_instance();
         mismatch.schema_version = 5;
-        assert!(host.stage_plugin_class_instance("PLUGIN", &mismatch).is_err());
+        assert!(host
+            .stage_plugin_class_instance("PLUGIN", &mismatch)
+            .is_err());
         // Broken design parameter (the chain audit refuses at the contract).
         let mut broken = traverse_instance();
         let ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(chain) =
@@ -16296,7 +16401,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         broken.tolerance = 1e-3;
         assert!(host.stage_plugin_class_instance("PLUGIN", &broken).is_err());
         // Broken tolerance.
-        assert!(host.stage_plugin_class_instance("PLUGIN", &traverse_instance_for(0.0)).is_err());
+        assert!(host
+            .stage_plugin_class_instance("PLUGIN", &traverse_instance_for(0.0))
+            .is_err());
         assert_eq!(host.document().entities().count(), 0);
         assert_eq!(host.app.tabs[0].scene.geometry_epoch, epoch_before);
     }
@@ -16325,7 +16432,11 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             assert!(host.sample_parametric(&chain, 141.0).unwrap().is_none());
             assert_eq!(host.app.tabs[0].scene.geometry_epoch, epoch_before);
         }
-        assert_eq!(app.tabs[0].history.undo_stack.len(), 0, "the sample records nothing");
+        assert_eq!(
+            app.tabs[0].history.undo_stack.len(),
+            0,
+            "the sample records nothing"
+        );
     }
 
     #[test]
@@ -16338,7 +16449,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             let mut host = HostSession::new(&mut app, 0);
             host.push_undo("PLUGIN: refresh alignment display");
             let _ = host.stage_parametric_chain("plan", &plan, 1e-3).unwrap();
-            let _ = host.stage_parametric_chain("profile", &profile, 1e-3).unwrap();
+            let _ = host
+                .stage_parametric_chain("profile", &profile, 1e-3)
+                .unwrap();
         }
         app.finish_pending_history(0);
         assert_eq!(
@@ -16417,7 +16530,9 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         let handles;
         {
             let mut host = HostSession::new(&mut app, 0);
-            assert!(host.register_plugin_class("PLUGIN", &traverse_class()).is_ok());
+            assert!(host
+                .register_plugin_class("PLUGIN", &traverse_class())
+                .is_ok());
             let mut instance = traverse_instance();
             instance.design = ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(
                 crest_profile_chain(),
@@ -16426,16 +16541,27 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             handles = host
                 .stage_plugin_class_instance("PLUGIN", &instance)
                 .expect("the crest instance stages");
-            assert_eq!(handles.len(), 3, "three exact carriers (line, spline, line)");
+            assert_eq!(
+                handles.len(),
+                3,
+                "three exact carriers (line, spline, line)"
+            );
             let EntityType::Spline(spline) = host.document().get_entity(handles[1]).expect("live")
             else {
                 panic!("the crest stages a degree-2 spline");
             };
             assert_eq!(spline.degree, 2);
-            assert!((spline.control_points[2].y - 8.0).abs() < 1e-9, "the declared crest height");
+            assert!(
+                (spline.control_points[2].y - 8.0).abs() < 1e-9,
+                "the declared crest height"
+            );
         }
         app.finish_pending_history(0);
-        assert_eq!(app.tabs[0].history.undo_stack.len(), 1, "staging stays one step");
+        assert_eq!(
+            app.tabs[0].history.undo_stack.len(),
+            1,
+            "staging stays one step"
+        );
 
         {
             let mut host = HostSession::new(&mut app, 0);
@@ -16457,7 +16583,10 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                 .sample_parametric(&front, 300.0)
                 .expect("the front samples")
                 .expect("the joint sits at the front chain's end");
-            assert!((joint.point[1] - 11.0).abs() < 1e-9, "the crest moved to 11.0");
+            assert!(
+                (joint.point[1] - 11.0).abs() < 1e-9,
+                "the crest moved to 11.0"
+            );
             let joint_gradient = joint.direction[1] / joint.direction[0];
             edited.segments[2].start_point = joint.point;
             edited.segments[2].start_direction = joint_gradient.atan();
@@ -16470,10 +16599,17 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
 
             // Re-derive the edited design's entity set: same carriers, same
             // count, in the same order (the staging builds per segment).
-            let (new_entities, carriers) =
-                crate::parametric::build_display_entities(&edited, 1e-3).expect("the edited design derives");
-            assert_eq!(new_entities.len(), handles.len(), "the edited set is count-stable");
-            assert!(matches!(carriers[1], crate::parametric::StagedCarrier::Exact));
+            let (new_entities, carriers) = crate::parametric::build_display_entities(&edited, 1e-3)
+                .expect("the edited design derives");
+            assert_eq!(
+                new_entities.len(),
+                handles.len(),
+                "the edited set is count-stable"
+            );
+            assert!(matches!(
+                carriers[1],
+                crate::parametric::StagedCarrier::Exact
+            ));
             let EntityType::Spline(fresh) = &new_entities[1] else {
                 panic!("the edited crest still carries the exact spline carrier");
             };
@@ -16526,13 +16662,19 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                 "the restage updates the display set in place"
             );
             // The changed carrier vertices are the document's state now...
-            let EntityType::Spline(spline) =
-                host.document().get_entity(handles[1]).expect("the spline keeps its handle")
+            let EntityType::Spline(spline) = host
+                .document()
+                .get_entity(handles[1])
+                .expect("the spline keeps its handle")
             else {
                 panic!("the carrier keeps its kind over the restage");
             };
-            assert!((spline.control_points[2].y - 11.0).abs() < 1e-9, "the edited crest rides");
-            let EntityType::Line(tail) = host.document().get_entity(handles[2]).expect("live") else {
+            assert!(
+                (spline.control_points[2].y - 11.0).abs() < 1e-9,
+                "the edited crest rides"
+            );
+            let EntityType::Line(tail) = host.document().get_entity(handles[2]).expect("live")
+            else {
                 panic!("the tail keeps its kind");
             };
             assert!(
@@ -16546,8 +16688,14 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                     host.app.tabs[0].scene.is_reference_only(*handle),
                     "the designated display set stays reference-only"
                 );
-                let stamped = host.read_record(*handle, "PLUGIN_ALIGN_DISPLAY").expect("the stamp");
-                assert_eq!(stamped.values.len(), 2, "the identity stamp survives the restage");
+                let stamped = host
+                    .read_record(*handle, "PLUGIN_ALIGN_DISPLAY")
+                    .expect("the stamp");
+                assert_eq!(
+                    stamped.values.len(),
+                    2,
+                    "the identity stamp survives the restage"
+                );
             }
         }
 
@@ -16555,9 +16703,15 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         app.undo_steps(1);
         {
             let mut host = HostSession::new(&mut app, 0);
-            assert_eq!(host.document().entities().count(), 3, "nothing added or removed");
-            let EntityType::Spline(spline) =
-                host.document().get_entity(handles[1]).expect("the spline keeps its handle")
+            assert_eq!(
+                host.document().entities().count(),
+                3,
+                "nothing added or removed"
+            );
+            let EntityType::Spline(spline) = host
+                .document()
+                .get_entity(handles[1])
+                .expect("the spline keeps its handle")
             else {
                 panic!("the carrier keeps its kind over the undo");
             };
@@ -16630,10 +16784,7 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                         codec::objects::XRecordValue::Double(0.06),
                     ),
                     codec::objects::XRecordEntry::string(1, "segments"),
-                    codec::objects::XRecordEntry::new(
-                        90,
-                        codec::objects::XRecordValue::Int32(3),
-                    ),
+                    codec::objects::XRecordEntry::new(90, codec::objects::XRecordValue::Int32(3)),
                     codec::objects::XRecordEntry::string(1, "locked_note"),
                     codec::objects::XRecordEntry::string(1, "per alignment sheet"),
                 ],
@@ -16642,7 +16793,10 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         }
         app.finish_pending_history(0);
         let undo_before = app.tabs[0].history.undo_stack.len();
-        assert_eq!(undo_before, 2, "staging + record seeding compose as two steps");
+        assert_eq!(
+            undo_before, 2,
+            "staging + record seeding compose as two steps"
+        );
         {
             let mut host = HostSession::new(&mut app, 0);
             host.update_plugin_class_instance_parameter(handles[0], "peak_gradient", "0.09")
@@ -16671,7 +16825,10 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
                 .expect("the record");
             assert_eq!(entries.len(), 6);
             assert_eq!(format!("{:?}", entries[3].value), "Int32(3)");
-            assert_eq!(format!("{:?}", entries[5].value), "String(\"per alignment sheet\")");
+            assert_eq!(
+                format!("{:?}", entries[5].value),
+                "String(\"per alignment sheet\")"
+            );
 
             // REFUSALS: unknown name, read-only row, unparseable and
             // non-finite values — each before any change, each recording
@@ -16709,7 +16866,11 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             let entries_after = host
                 .read_xrecord(&["PLUGIN"], "PLUGIN_ALIGN_DISPLAY")
                 .expect("the record");
-            assert_eq!(entries_after.len(), entries.len(), "refusals changed nothing");
+            assert_eq!(
+                entries_after.len(),
+                entries.len(),
+                "refusals changed nothing"
+            );
             for (before, after) in entries.iter().zip(entries_after.iter()) {
                 assert_eq!(before.code, after.code, "refusals changed nothing");
                 assert_eq!(format!("{:?}", before.value), format!("{:?}", after.value));
@@ -16768,9 +16929,7 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
             let section = panel
                 .sections
                 .iter()
-                .find(|section| {
-                    section.title == crate::t!("Plugin class parameters").into_owned()
-                })
+                .find(|section| section.title == crate::t!("Plugin class parameters").into_owned())
                 .expect("the stamped selection rides its class's rows");
             assert_eq!(section.props.len(), 2, "the source line + the declared row");
             assert_eq!(section.props[0].label, "Source");
@@ -16822,16 +16981,14 @@ step('undo_move', lambda: M.move([u], (0, 0, 0), (7, 0, 0)))
         plain.tabs[0].is_start = false;
         {
             let mut host = HostSession::new(&mut plain, 0);
-            let unstamped = host
-                .add_entity(EntityType::Point(Point::at(codec::types::Vector3::new(
-                    1.0, 1.0, 0.0,
-                ))));
+            let unstamped = host.add_entity(EntityType::Point(Point::at(
+                codec::types::Vector3::new(1.0, 1.0, 0.0),
+            )));
             plain.tabs[0].scene.selected.insert(unstamped);
         }
         plain.refresh_properties();
         assert!(
-            plain
-                .tabs[0]
+            plain.tabs[0]
                 .properties
                 .sections
                 .iter()

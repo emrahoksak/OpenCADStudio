@@ -147,7 +147,10 @@ impl OpenCADStudio {
                     }));
                     index += len;
                 }
-                let plain = || rows.iter().filter(|row| !matches!(row.widget, RowWidget::Group));
+                let plain = || {
+                    rows.iter()
+                        .filter(|row| !matches!(row.widget, RowWidget::Group))
+                };
                 let header = NodeRow {
                     field: format!("{SECTION}{}", props.first().map_or("", |p| p.field)),
                     label: section.title.clone(),
@@ -182,7 +185,12 @@ impl OpenCADStudio {
 
     /// The port of `handle` called `name` by field or by label, as
     /// `(field, value)`.
-    pub(super) fn graph_field(&self, i: usize, handle: Handle, name: &str) -> Option<(String, Value)> {
+    pub(super) fn graph_field(
+        &self,
+        i: usize,
+        handle: Handle,
+        name: &str,
+    ) -> Option<(String, Value)> {
         let name = name.trim();
         self.graph_entity_sections(i, handle)
             .into_iter()
@@ -193,7 +201,12 @@ impl OpenCADStudio {
 
     /// An object node's rows: its object handle(s), then the panel page of its
     /// first entity. With several entities the values shown are the lists.
-    fn graph_object_sections(&self, i: usize, id: NodeId, kind: Option<ObjectKind>) -> Vec<NodeSection> {
+    fn graph_object_sections(
+        &self,
+        i: usize,
+        id: NodeId,
+        kind: Option<ObjectKind>,
+    ) -> Vec<NodeSection> {
         let graph = &self.tabs[i].graph;
         let first = graph.ui.get(&id).and_then(|ui| ui.handles.first()).copied();
         let outputs = graph.engine.node(id).map(|node| &node.outputs);
@@ -511,7 +524,9 @@ impl OpenCADStudio {
                     !drawing.is_empty() && drawing == document.header.fingerprint_guid;
                 for node in &graph.engine.nodes {
                     let kind = match &node.kind {
-                        Kind::Object(name) => ObjectKind::from_name(name).filter(|kind| kind.owns()),
+                        Kind::Object(name) => {
+                            ObjectKind::from_name(name).filter(|kind| kind.owns())
+                        }
                         Kind::Op(_) => None,
                     };
                     if let Some(ui) = graph.ui.get_mut(&node.id) {
@@ -530,7 +545,10 @@ impl OpenCADStudio {
                 // Evaluating unwinds what the open graph did first.
                 let (applied, created) = {
                     let open = &mut self.tabs[i].graph;
-                    (std::mem::take(&mut open.applied), std::mem::take(&mut open.created))
+                    (
+                        std::mem::take(&mut open.applied),
+                        std::mem::take(&mut open.created),
+                    )
                 };
                 graph.applied.splice(0..0, applied);
                 graph.created.extend(created);
@@ -572,7 +590,8 @@ impl OpenCADStudio {
                 format!("{{{}}}", crate::app::control::new_guid_v4().to_uppercase());
             tab.dirty = true;
         }
-        tab.graph.to_file(&tab.scene.document.header.fingerprint_guid)
+        tab.graph
+            .to_file(&tab.scene.document.header.fingerprint_guid)
     }
 
     /// An edited input, kept as the node's parameter: an operation reads it

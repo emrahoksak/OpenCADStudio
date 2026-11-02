@@ -78,13 +78,33 @@ impl CadCommand for EditCommand {
 impl OpenCADStudio {
     pub(super) fn set_authoring_alignment_type(&mut self, value: &str) -> Task<Message> {
         let i = self.active_tab;
-        let Some(definition) = self.tabs[i].active_block_edit_session().map(|session| session.br_handle) else { return Task::none() };
-        let Some(parameter) = self.tabs[i].selected_authoring else { return Task::none() };
-        let perpendicular = if value.eq_ignore_ascii_case("Perpendicular") || value == crate::t!("Perpendicular").as_ref() { true }
-            else if value.eq_ignore_ascii_case("Tangent") || value == crate::t!("Tangent").as_ref() { false }
-            else { self.command_line.push_error(crate::t!("Choose Perpendicular or Tangent.").as_ref()); return Task::none() };
+        let Some(definition) = self.tabs[i]
+            .active_block_edit_session()
+            .map(|session| session.br_handle)
+        else {
+            return Task::none();
+        };
+        let Some(parameter) = self.tabs[i].selected_authoring else {
+            return Task::none();
+        };
+        let perpendicular = if value.eq_ignore_ascii_case("Perpendicular")
+            || value == crate::t!("Perpendicular").as_ref()
+        {
+            true
+        } else if value.eq_ignore_ascii_case("Tangent") || value == crate::t!("Tangent").as_ref() {
+            false
+        } else {
+            self.command_line
+                .push_error(crate::t!("Choose Perpendicular or Tangent.").as_ref());
+            return Task::none();
+        };
         let mut staged = self.tabs[i].scene.document.clone();
-        match crate::scene::block_orientation_parameter::set_alignment_type(&mut staged, definition, parameter, perpendicular) {
+        match crate::scene::block_orientation_parameter::set_alignment_type(
+            &mut staged,
+            definition,
+            parameter,
+            perpendicular,
+        ) {
             Ok(changed) => {
                 if changed {
                     self.push_undo_snapshot(i, "Alignment type");
@@ -107,15 +127,24 @@ impl OpenCADStudio {
         }
         use crate::scene::block_actions::options;
         let i = self.active_tab;
-        let Some(session) = self.tabs[i].active_block_edit_session() else { return Task::none() };
+        let Some(session) = self.tabs[i].active_block_edit_session() else {
+            return Task::none();
+        };
         let definition = session.br_handle;
-        let Some(handle) = self.tabs[i].selected_authoring else { return Task::none() };
+        let Some(handle) = self.tabs[i].selected_authoring else {
+            return Task::none();
+        };
         let key = crate::ui::properties::FieldKey::Geom(field);
-        let Some(input) = self.tabs[i].properties.edit_buf.get(&key) else { return Task::none() };
-        let Some(before) = options::offsets(&self.tabs[i].scene.document, handle) else { return Task::none() };
+        let Some(input) = self.tabs[i].properties.edit_buf.get(&key) else {
+            return Task::none();
+        };
+        let Some(before) = options::offsets(&self.tabs[i].scene.document, handle) else {
+            return Task::none();
+        };
         let value = crate::app::expr_eval::eval_to_string(input).parse::<f64>();
         let Ok(value) = value else {
-            self.command_line.push_error(crate::t!("Enter a finite action override.").as_ref());
+            self.command_line
+                .push_error(crate::t!("Enter a finite action override.").as_ref());
             return Task::none();
         };
         let (multiplier, angle) = match field {
@@ -126,13 +155,14 @@ impl OpenCADStudio {
         let mut staged = self.tabs[i].scene.document.clone();
         match options::set(&mut staged, definition, handle, multiplier, angle) {
             Ok(true) => {
-                let staged = match crate::scene::block_actions::instance::refresh(&staged, definition) {
-                    Ok(staged) => staged,
-                    Err(error) => {
-                        self.command_line.push_error(crate::t!(error).as_ref());
-                        return Task::none();
-                    }
-                };
+                let staged =
+                    match crate::scene::block_actions::instance::refresh(&staged, definition) {
+                        Ok(staged) => staged,
+                        Err(error) => {
+                            self.command_line.push_error(crate::t!(error).as_ref());
+                            return Task::none();
+                        }
+                    };
                 self.push_undo_snapshot(i, "Edit block action override");
                 self.apply_action_document(i, staged);
                 self.tabs[i].dirty = true;
@@ -141,7 +171,9 @@ impl OpenCADStudio {
                 self.tabs[i].properties.edit_buf.remove(&key);
                 self.refresh_properties();
             }
-            Ok(false) => { self.tabs[i].properties.edit_buf.remove(&key); }
+            Ok(false) => {
+                self.tabs[i].properties.edit_buf.remove(&key);
+            }
             Err(error) => self.command_line.push_error(crate::t!(error).as_ref()),
         }
         Task::none()
@@ -150,20 +182,47 @@ impl OpenCADStudio {
     pub(super) fn commit_authoring_action_base(&mut self, field: &'static str) -> Task<Message> {
         use crate::scene::block_actions::{instance, options};
         let i = self.active_tab;
-        let Some(session) = self.tabs[i].active_block_edit_session() else { return Task::none() };
+        let Some(session) = self.tabs[i].active_block_edit_session() else {
+            return Task::none();
+        };
         let definition = session.br_handle;
-        let Some(handle) = self.tabs[i].selected_authoring else { return Task::none() };
-        let Some(before) = options::base(&self.tabs[i].scene.document, handle) else { return Task::none() };
+        let Some(handle) = self.tabs[i].selected_authoring else {
+            return Task::none();
+        };
+        let Some(before) = options::base(&self.tabs[i].scene.document, handle) else {
+            return Task::none();
+        };
         let key = crate::ui::properties::FieldKey::Geom(field);
-        let editing_offset = matches!(field, "authoring_action_base_offset_x" | "authoring_action_base_offset_y");
-        let mut point = if editing_offset { DVec3::new(before.offset.x, before.offset.y, before.offset.z) }
-            else { DVec3::new(before.base_point.x, before.base_point.y, before.base_point.z) };
-        let dependent = if field == "authoring_action_base_dependent" { !before.dependent } else { before.dependent };
-        let point = if field == "authoring_action_base_dependent" { None } else {
-            if editing_offset != dependent { return Task::none() }
-            let Some(input) = self.tabs[i].properties.edit_buf.get(&key) else { return Task::none() };
+        let editing_offset = matches!(
+            field,
+            "authoring_action_base_offset_x" | "authoring_action_base_offset_y"
+        );
+        let mut point = if editing_offset {
+            DVec3::new(before.offset.x, before.offset.y, before.offset.z)
+        } else {
+            DVec3::new(
+                before.base_point.x,
+                before.base_point.y,
+                before.base_point.z,
+            )
+        };
+        let dependent = if field == "authoring_action_base_dependent" {
+            !before.dependent
+        } else {
+            before.dependent
+        };
+        let point = if field == "authoring_action_base_dependent" {
+            None
+        } else {
+            if editing_offset != dependent {
+                return Task::none();
+            }
+            let Some(input) = self.tabs[i].properties.edit_buf.get(&key) else {
+                return Task::none();
+            };
             let Ok(value) = crate::app::expr_eval::eval_to_string(input).parse::<f64>() else {
-                self.command_line.push_error(crate::t!("Specify a finite action base point.").as_ref());
+                self.command_line
+                    .push_error(crate::t!("Specify a finite action base point.").as_ref());
                 return Task::none();
             };
             match field {
@@ -178,7 +237,9 @@ impl OpenCADStudio {
         let mut staged = self.tabs[i].scene.document.clone();
         let result = if editing_offset {
             options::set_base_offset(&mut staged, definition, handle, point.unwrap())
-        } else { options::set_base(&mut staged, definition, handle, dependent, point) };
+        } else {
+            options::set_base(&mut staged, definition, handle, dependent, point)
+        };
         match result {
             Ok(true) => match instance::refresh(&staged, definition) {
                 Ok(staged) => {
@@ -192,7 +253,9 @@ impl OpenCADStudio {
                 }
                 Err(error) => self.command_line.push_error(crate::t!(error).as_ref()),
             },
-            Ok(false) => { self.tabs[i].properties.edit_buf.remove(&key); }
+            Ok(false) => {
+                self.tabs[i].properties.edit_buf.remove(&key);
+            }
             Err(error) => self.command_line.push_error(crate::t!(error).as_ref()),
         }
         Task::none()

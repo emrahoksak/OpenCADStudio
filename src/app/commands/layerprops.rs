@@ -105,10 +105,8 @@ impl OpenCADStudio {
                             .push_output(crate::t!("LAYER: layers thawed.").as_ref());
                     }
                     "LOCK" | "LO" => {
-                        let names: Vec<String> = parts[1..]
-                            .iter()
-                            .map(|name| (*name).to_string())
-                            .collect();
+                        let names: Vec<String> =
+                            parts[1..].iter().map(|name| (*name).to_string()).collect();
                         for name in &parts[1..] {
                             if let Some(l) = self.tabs[i].scene.document.layers.get_mut(name) {
                                 l.flags.locked = true;
@@ -122,10 +120,8 @@ impl OpenCADStudio {
                             .push_output(crate::t!("LAYER: layers locked.").as_ref());
                     }
                     "UNLOCK" | "UL" => {
-                        let names: Vec<String> = parts[1..]
-                            .iter()
-                            .map(|name| (*name).to_string())
-                            .collect();
+                        let names: Vec<String> =
+                            parts[1..].iter().map(|name| (*name).to_string()).collect();
                         for name in &parts[1..] {
                             if let Some(l) = self.tabs[i].scene.document.layers.get_mut(name) {
                                 l.flags.locked = false;

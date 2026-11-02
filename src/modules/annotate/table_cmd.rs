@@ -176,7 +176,10 @@ fn cell_style_from_row(style: &codec::objects::RowCellStyle) -> CellStyle {
     result
 }
 
-pub(crate) fn selected_row_style(table_style: &codec::objects::TableStyle, name: &str) -> CellStyle {
+pub(crate) fn selected_row_style(
+    table_style: &codec::objects::TableStyle,
+    name: &str,
+) -> CellStyle {
     let style = if name.eq_ignore_ascii_case("Title") {
         &table_style.title_row_style
     } else if name.eq_ignore_ascii_case("Header") {
@@ -277,9 +280,10 @@ impl TableCommand {
         command.cell_width = column_width;
         command.row_lines = row_lines.max(1);
         command.preview_enabled = preview_enabled;
-        command.row_style_overrides = command.style.as_ref().map(|choice| {
-            row_style_names.map(|name| selected_row_style(&choice.style, name))
-        });
+        command.row_style_overrides = command
+            .style
+            .as_ref()
+            .map(|choice| row_style_names.map(|name| selected_row_style(&choice.style, name)));
         command.step = if window {
             Step::FirstCorner
         } else {
@@ -308,8 +312,13 @@ impl TableCommand {
         let style = self.style.as_ref().map(|choice| &choice.style);
         let Some(second) = second else {
             let widths = vec![self.cell_width; self.columns.unwrap_or(1)];
-            let heights =
-                row_heights(style, title, header, self.data_rows.unwrap_or(1), self.row_lines);
+            let heights = row_heights(
+                style,
+                title,
+                header,
+                self.data_rows.unwrap_or(1),
+                self.row_lines,
+            );
             return (first, widths, heights);
         };
         let second = self.plane.to_local(second);
@@ -518,9 +527,7 @@ impl CadCommand for TableCommand {
                 lines = self.row_lines
             )
             .into_owned(),
-            Step::LinkName => {
-                t!("%{n}  Enter the name of a data link or [?]:", n = n).into_owned()
-            }
+            Step::LinkName => t!("%{n}  Enter the name of a data link or [?]:", n = n).into_owned(),
         }
     }
 
@@ -692,7 +699,9 @@ impl CadCommand for TableCommand {
     }
 }
 
-inventory::submit!(crate::command::CommandRegistration { names: &["TABLE", "-TABLE"] });
+inventory::submit!(crate::command::CommandRegistration {
+    names: &["TABLE", "-TABLE"]
+});
 
 /// A table cell resolved from a pick: grid coordinates plus whether its
 /// content is locked against editing.

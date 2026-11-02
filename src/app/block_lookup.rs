@@ -111,7 +111,10 @@ impl OpenCADStudio {
     ) -> Task<Message> {
         let i = self.active_tab;
         if self.tabs[i].id != document
-            || self.tabs[i].active_block_edit_session().map(|s| s.br_handle) != Some(definition)
+            || self.tabs[i]
+                .active_block_edit_session()
+                .map(|s| s.br_handle)
+                != Some(definition)
         {
             self.command_line.push_error(
                 crate::t!("The action's Block Editor session is no longer active.").as_ref(),

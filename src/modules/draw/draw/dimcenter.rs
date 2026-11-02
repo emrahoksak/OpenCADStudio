@@ -233,7 +233,10 @@ impl CadCommand for CenterMarkCommand {
             return self.layer.on_text(text);
         }
         if matches!(
-            text.trim().trim_start_matches('_').to_ascii_uppercase().as_str(),
+            text.trim()
+                .trim_start_matches('_')
+                .to_ascii_uppercase()
+                .as_str(),
             "L" | "LAYER"
         ) {
             self.layer.active = true;
@@ -339,7 +342,9 @@ impl CadCommand for CenterReassociateCommand {
         if mark {
             let valid = picked
                 .as_ref()
-                .and_then(|entity| crate::scene::centermark::picked_mark_source(entity, handle, point))
+                .and_then(|entity| {
+                    crate::scene::centermark::picked_mark_source(entity, handle, point)
+                })
                 .is_some();
             if !valid {
                 return CmdResult::ReportError(crate::tr!("center-cmd", "mark-invalid"));

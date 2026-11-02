@@ -473,10 +473,7 @@ impl OpenCADStudio {
             .as_ref()
             .is_some_and(|command| command.name() == "DIM");
         if let (true, Some(handle)) = (continue_command && in_dim, committed) {
-            let overlapped = super::dim_edit::overlapping_dimensions(
-                &self.tabs[i].scene,
-                handle,
-            );
+            let overlapped = super::dim_edit::overlapping_dimensions(&self.tabs[i].scene, handle);
             if !overlapped.is_empty() {
                 let asked = self.tabs[i]
                     .active_cmd
@@ -1081,7 +1078,10 @@ impl OpenCADStudio {
             return Some(Task::none());
         }
         self.push_undo_snapshot(i, "CENTERREASSOCIATE");
-        if self.tabs[i].scene.reassociate_centerline(target, first, second) {
+        if self.tabs[i]
+            .scene
+            .reassociate_centerline(target, first, second)
+        {
             self.tabs[i].dirty = true;
         } else {
             self.command_line

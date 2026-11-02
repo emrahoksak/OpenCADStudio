@@ -617,7 +617,9 @@ impl OpenCADStudio {
                     return Some(Task::none());
                 };
                 let scene = &self.tabs[i].scene;
-                let Some(frame) = scene.active_viewport.and_then(|vp| scene.viewport_frame(vp))
+                let Some(frame) = scene
+                    .active_viewport
+                    .and_then(|vp| scene.viewport_frame(vp))
                 else {
                     self.command_line.push_error(
                         crate::t!("CHSPACE: No plan-view viewport to change space through.")
@@ -828,14 +830,10 @@ impl OpenCADStudio {
                             vp.width = *w;
                             vp.height = *h;
                             vp.id = 2; // commit_entity will assign unique IDs
-                            match self.tabs[i]
-                                .scene
-                                .document
-                                .add_entity_to_layout(
-                                    codec::EntityType::Viewport(Box::new(vp)),
-                                    &layout_name,
-                                )
-                            {
+                            match self.tabs[i].scene.document.add_entity_to_layout(
+                                codec::EntityType::Viewport(Box::new(vp)),
+                                &layout_name,
+                            ) {
                                 Ok(handle) => {
                                     self.tabs[i].scene.auto_fit_viewport(handle);
                                 }

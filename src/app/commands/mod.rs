@@ -20,14 +20,14 @@ mod dim;
 mod dim_cmd;
 mod dim_inspect;
 mod dim_layer;
-mod layer_variable;
-pub(crate) mod extraction_eval;
-mod mleader_layer;
 pub(crate) mod display;
 mod draw;
+pub(crate) mod extraction_eval;
 mod field;
 mod fileops;
 mod hyperlink;
+mod layer_variable;
+mod mleader_layer;
 pub(crate) use hyperlink::{hyperlink_options, set_hyperlink_options};
 mod inquiry;
 mod layerprops;
@@ -48,8 +48,8 @@ mod refedit;
 pub(crate) mod sheet_set;
 mod spell;
 mod styleprops;
-mod text_edit;
 mod table_style_var;
+mod text_edit;
 mod text_layer;
 mod ucsfollow;
 mod view;
@@ -229,7 +229,9 @@ impl OpenCADStudio {
         }
         let construction = cmd.trim_start_matches(['_', '.']);
         if construction == "BCONSTRUCTION" || construction.starts_with("BCONSTRUCTION ") {
-            return Some(self.start_block_construction(construction.strip_prefix("BCONSTRUCTION").unwrap().trim()));
+            return Some(self.start_block_construction(
+                construction.strip_prefix("BCONSTRUCTION").unwrap().trim(),
+            ));
         }
         if cmd.trim_start_matches(['_', '.']) == "BCYCLEORDER" {
             return Some(self.open_block_cycle_order());
@@ -242,9 +244,8 @@ impl OpenCADStudio {
         if self.block_editor_preferences.locked
             && matches!(verb, "BEDIT" | "BEDIT_BEGIN" | "BEDIT_OPEN" | "BEDIT_NEW")
         {
-            self.command_line.push_error(
-                crate::t!("The Block Editor is locked by BLOCKEDITLOCK.").as_ref(),
-            );
+            self.command_line
+                .push_error(crate::t!("The Block Editor is locked by BLOCKEDITLOCK.").as_ref());
             return Some(Task::none());
         }
         if cmd == "BACTIONSET" {
@@ -254,20 +255,25 @@ impl OpenCADStudio {
             }
         }
         if cmd == "BASSOCIATE" {
-            if let Some(error)=self.action_association_error() {
+            if let Some(error) = self.action_association_error() {
                 self.command_line.push_error(crate::t!(error).as_ref());
                 return Some(Task::none());
             }
         }
         if cmd == "BACTIONBAR" || cmd.starts_with("BACTIONBAR ") {
-            if let Some(error)=self.action_bar_error() {
+            if let Some(error) = self.action_bar_error() {
                 self.command_line.push_error(crate::t!(error).as_ref());
                 return Some(Task::none());
             }
         }
-        if self.block_editor_preferences.action_bars && self.tabs[i].active_block_edit_session().is_some()
-            && matches!(verb,"BACTIONSET"|"BASSOCIATE"|"BLOOKUPTABLE") {
-            self.command_line.push_error(crate::t!("Use the action bar to edit this action, or set BACTIONBARMODE to 0.").as_ref());
+        if self.block_editor_preferences.action_bars
+            && self.tabs[i].active_block_edit_session().is_some()
+            && matches!(verb, "BACTIONSET" | "BASSOCIATE" | "BLOOKUPTABLE")
+        {
+            self.command_line.push_error(
+                crate::t!("Use the action bar to edit this action, or set BACTIONBARMODE to 0.")
+                    .as_ref(),
+            );
             return Some(Task::none());
         }
         if matches!(
@@ -294,7 +300,9 @@ impl OpenCADStudio {
                     );
                     return Some(Task::none());
                 }
-                if let Some(error) = self.action_error(crate::scene::block_actions::Kind::parse(args)) {
+                if let Some(error) =
+                    self.action_error(crate::scene::block_actions::Kind::parse(args))
+                {
                     self.command_line.push_error(crate::t!(error).as_ref());
                     return Some(Task::none());
                 }
@@ -433,6 +441,16 @@ impl OpenCADStudio {
         }
         // Cancel any running command before starting a new one.
         if self.tabs[i].active_cmd.is_some() {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                if self
+                    .metraj
+                    .mm_pending
+                    .is_some_and(|(tab_id, _)| tab_id == self.tabs[i].id)
+                {
+                    self.metraj.mm_pending = None;
+                }
+            }
             self.tabs[i].pending_parameter_set_follow_up = None;
             self.tabs[i].pending_xy_box_set = None;
             self.tabs[i].pending_action_pair = None;
@@ -491,10 +509,15 @@ impl OpenCADStudio {
         let cmd_upper = cmd.trim().to_uppercase();
         let stripped_cmd = cmd_upper.replace([' ', '_', '-'], "");
         let panel_match = self.plugin_panels.iter().find_map(|(id, state)| {
-            let matches_cmd = state.def.command.as_deref().map(|c| {
-                let cu = c.to_uppercase();
-                cu == cmd_upper || cu.replace([' ', '_', '-'], "") == stripped_cmd
-            }).unwrap_or(false);
+            let matches_cmd = state
+                .def
+                .command
+                .as_deref()
+                .map(|c| {
+                    let cu = c.to_uppercase();
+                    cu == cmd_upper || cu.replace([' ', '_', '-'], "") == stripped_cmd
+                })
+                .unwrap_or(false);
             let matches_id = {
                 let id_u = id.to_uppercase();
                 id_u == cmd_upper || id_u.replace([' ', '_', '-'], "") == stripped_cmd
@@ -516,7 +539,8 @@ impl OpenCADStudio {
                 let mut host = crate::app::plugin_host::HostSession::new(self, i);
                 let toggled = host.toggle_panel(&panel_id, None);
                 if toggled {
-                    self.command_line.push_info(&format!("{title} palette toggled."));
+                    self.command_line
+                        .push_info(&format!("{title} palette toggled."));
                     self.tabs[i].last_cmd = Some(cmd.to_string());
                     self.command_line.record_recent(cmd);
                     return Some(self.finish_dispatch(cmd));
@@ -576,6 +600,10 @@ impl OpenCADStudio {
     /// `finish_dispatch`), or `None` to defer to the next — equivalent to one
     /// sequential `match` over all arms.
     fn dispatch_families(&mut self, cmd: &str, i: usize) -> Option<Task<Message>> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(task) = self.dispatch_metraj(cmd) {
+            return Some(task);
+        }
         if let Some(t) = self.dispatch_text_layer(cmd, i) {
             return Some(t);
         }
@@ -779,6 +807,7 @@ pub fn start_allowed(cmd: &str) -> bool {
     // questions from any tab.
     let verb = cmd.split_whitespace().next().unwrap_or("");
     is_spacemouse_command(cmd)
+        || (cfg!(not(target_arch = "wasm32")) && matches!(cmd, "METRAJ" | "DEMIR"))
         || matches!(verb, "OPEN" | "SCRIPT" | "SCR" | "FILEDIA" | "SDI" | "EXIT")
         || matches!(
             cmd,
@@ -1550,7 +1579,10 @@ mod marquee_cancel_tests {
 
         // Initially panel is registered and not visible
         assert!(!app.plugin_panels.get("sample_palette").unwrap().visible);
-        assert!(app.command_line.dynamic_commands.contains(&"SAMPLEPALETTE".to_string()));
+        assert!(app
+            .command_line
+            .dynamic_commands
+            .contains(&"SAMPLEPALETTE".to_string()));
 
         // Dispatch SAMPLEPALETTE command to toggle on
         let _ = app.dispatch_command("SAMPLEPALETTE");
@@ -1576,11 +1608,12 @@ mod marquee_cancel_tests {
         let mut app = fresh();
         let i = app.active_tab;
 
-        let dialog = DialogDef::new("Test Modal").with_row(DialogRow::single(DialogControl::Text {
-            id: "name".to_string(),
-            label: "Name".to_string(),
-            default: "DefaultVal".to_string(),
-        }));
+        let dialog =
+            DialogDef::new("Test Modal").with_row(DialogRow::single(DialogControl::Text {
+                id: "name".to_string(),
+                label: "Name".to_string(),
+                default: "DefaultVal".to_string(),
+            }));
 
         {
             let mut host = crate::app::plugin_host::HostSession::new(&mut app, i);
@@ -1589,10 +1622,7 @@ mod marquee_cancel_tests {
         }
 
         assert!(app.plugin_dialog_state.is_some());
-        assert_eq!(
-            app.active_modal,
-            Some(crate::app::ModalKind::PluginDialog)
-        );
+        assert_eq!(app.active_modal, Some(crate::app::ModalKind::PluginDialog));
         assert_eq!(
             app.plugin_dialog_state.as_ref().unwrap().title(),
             "Test Modal"

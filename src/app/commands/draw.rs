@@ -490,7 +490,10 @@ impl OpenCADStudio {
             {
                 use crate::modules::draw::select::SelectObjectsCommand;
                 let (prompt, apply) = if cmd == "CENTERRESET" {
-                    (crate::tr!("center-cmd", "reset-select"), "_CENTERRESET_APPLY")
+                    (
+                        crate::tr!("center-cmd", "reset-select"),
+                        "_CENTERRESET_APPLY",
+                    )
                 } else {
                     (
                         crate::tr!("center-cmd", "disassociate-select"),
@@ -526,8 +529,11 @@ impl OpenCADStudio {
                 if count > 0 {
                     self.tabs[i].dirty = true;
                 }
-                self.command_line
-                    .push_output(&crate::tr!("center-cmd", "reset-done", count = count));
+                self.command_line.push_output(&crate::tr!(
+                    "center-cmd",
+                    "reset-done",
+                    count = count
+                ));
             }
 
             "CENTERREASSOCIATE" => {
@@ -562,8 +568,11 @@ impl OpenCADStudio {
                 if count > 0 {
                     self.tabs[i].dirty = true;
                 }
-                self.command_line
-                    .push_output(&crate::tr!("center-cmd", "disassociate-done", count = count));
+                self.command_line.push_output(&crate::tr!(
+                    "center-cmd",
+                    "disassociate-done",
+                    count = count
+                ));
                 for (mark, associated) in was_associated {
                     if associated {
                         self.command_line.push_output(&if mark {
@@ -910,7 +919,9 @@ impl OpenCADStudio {
                     crate::command::WorkingPlane::default()
                 };
                 let mut sources = self.tabs[i].scene.boundary_sources_on_plane(plane, 1.0e-6);
-                self.tabs[i].scene.retain_sources_on_screen(&mut sources, plane);
+                self.tabs[i]
+                    .scene
+                    .retain_sources_on_screen(&mut sources, plane);
                 let selected = self.tabs[i]
                     .scene
                     .selected_entities()
@@ -925,7 +936,11 @@ impl OpenCADStudio {
 
             "ELLIPSE" => {
                 use crate::modules::draw::draw::ellipse::EllipseCommand;
-                let pellipse = self.tabs[i].scene.document.header.create_ellipse_as_polyline;
+                let pellipse = self.tabs[i]
+                    .scene
+                    .document
+                    .header
+                    .create_ellipse_as_polyline;
                 crate::modules::draw::defaults::set_pellipse(pellipse);
                 let new_cmd = EllipseCommand::new();
                 self.command_line.push_info(&new_cmd.prompt());
@@ -934,7 +949,11 @@ impl OpenCADStudio {
 
             "ELLIPSE_AXIS" => {
                 use crate::modules::draw::draw::ellipse::EllipseAxisCommand;
-                let pellipse = self.tabs[i].scene.document.header.create_ellipse_as_polyline;
+                let pellipse = self.tabs[i]
+                    .scene
+                    .document
+                    .header
+                    .create_ellipse_as_polyline;
                 crate::modules::draw::defaults::set_pellipse(pellipse);
                 let new_cmd = EllipseAxisCommand::new();
                 self.command_line.push_info(&new_cmd.prompt());
@@ -943,7 +962,11 @@ impl OpenCADStudio {
 
             "ELLIPSE_ARC" => {
                 use crate::modules::draw::draw::ellipse::EllipseArcCommand;
-                let pellipse = self.tabs[i].scene.document.header.create_ellipse_as_polyline;
+                let pellipse = self.tabs[i]
+                    .scene
+                    .document
+                    .header
+                    .create_ellipse_as_polyline;
                 crate::modules::draw::defaults::set_pellipse(pellipse);
                 let new_cmd = EllipseArcCommand::new();
                 self.command_line.push_info(&new_cmd.prompt());
@@ -1026,6 +1049,10 @@ impl OpenCADStudio {
                     self.tabs[i].active_cmd = Some(Box::new(cmd));
                 } else {
                     let n = handles.len();
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if self.request_metraj_delete(&handles, false) {
+                        return Some(Task::none());
+                    }
                     let delta_safe = self.delta_erase_safe(i, &handles);
                     let pending = self.begin_undo(i, "ERASE", handles.len(), delta_safe);
                     // Stash the erased entities so OOPS can restore them.
@@ -1106,7 +1133,11 @@ impl OpenCADStudio {
             }
 
             cmd if cmd.starts_with("DCDISPLAY ") => {
-                let visible = match cmd["DCDISPLAY ".len()..].trim().to_ascii_uppercase().as_str() {
+                let visible = match cmd["DCDISPLAY ".len()..]
+                    .trim()
+                    .to_ascii_uppercase()
+                    .as_str()
+                {
                     "" | "S" | "SHOW" => true,
                     "H" | "HIDE" => false,
                     _ => {
@@ -2967,7 +2998,8 @@ impl OpenCADStudio {
                     &self.tabs[i].scene.document,
                     &style,
                 );
-                let new_cmd = MTextCommand::with_defaults(height, style).with_annotative(annotative);
+                let new_cmd =
+                    MTextCommand::with_defaults(height, style).with_annotative(annotative);
                 self.command_line.push_info(&new_cmd.prompt());
                 self.tabs[i].active_cmd = Some(Box::new(new_cmd));
             }

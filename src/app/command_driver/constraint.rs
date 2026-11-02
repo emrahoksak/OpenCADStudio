@@ -111,8 +111,7 @@ impl OpenCADStudio {
             .map(|h| (h, crate::scene::ChangeKind::Modified))
             .collect();
         match anchor {
-            Some(anchor) => self
-                .tabs[i]
+            Some(anchor) => self.tabs[i]
                 .scene
                 .bump_entities_with_initial_parametric_policy(
                     &changes,
@@ -197,10 +196,8 @@ impl OpenCADStudio {
         self.tabs[i]
             .scene
             .record_undo_before(moving.entity, Some(before.clone()));
-        if let Some(codec::EntityType::Line(line)) = self.tabs[i]
-            .scene
-            .document
-            .get_entity_mut(moving.entity)
+        if let Some(codec::EntityType::Line(line)) =
+            self.tabs[i].scene.document.get_entity_mut(moving.entity)
         {
             line.end = end;
         }
@@ -1775,11 +1772,11 @@ impl OpenCADStudio {
             line.end.y + ny * shift,
             line.end.z,
         );
-        self.tabs[i].scene.record_undo_before(moving.entity, Some(before.clone()));
-        if let Some(codec::EntityType::Line(line)) = self.tabs[i]
+        self.tabs[i]
             .scene
-            .document
-            .get_entity_mut(moving.entity)
+            .record_undo_before(moving.entity, Some(before.clone()));
+        if let Some(codec::EntityType::Line(line)) =
+            self.tabs[i].scene.document.get_entity_mut(moving.entity)
         {
             line.start = start;
             line.end = end;

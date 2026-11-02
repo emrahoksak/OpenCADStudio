@@ -124,12 +124,25 @@ pub enum PanelId {
     Laywalk,
     /// The calculator (QUICKCALC).
     QuickCalc,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajTree,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajItems,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajQuantityGroups,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajAssignments,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajSummary,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajRebar,
     /// Dynamic plugin dockable side panel / palette (identified by unique numeric ID).
     Plugin(u32),
 }
 
 impl PanelId {
     /// Every panel, in the order the pallet menu lists them.
+    #[cfg(target_arch = "wasm32")]
     pub const ALL: [PanelId; 13] = [
         PanelId::Properties,
         PanelId::GraphicAttributes,
@@ -144,6 +157,27 @@ impl PanelId {
         PanelId::Layers,
         PanelId::Laywalk,
         PanelId::QuickCalc,
+    ];
+    #[cfg(not(target_arch = "wasm32"))]
+    pub const ALL: [PanelId; 18] = [
+        PanelId::Properties,
+        PanelId::GraphicAttributes,
+        PanelId::BlockPalette,
+        PanelId::AuthoringPalettes,
+        PanelId::ExternalReferences,
+        PanelId::Browser,
+        PanelId::NodeGraph,
+        PanelId::PointCloudManager,
+        PanelId::Count,
+        PanelId::SheetSetManager,
+        PanelId::Layers,
+        PanelId::Laywalk,
+        PanelId::QuickCalc,
+        PanelId::MetrajTree,
+        PanelId::MetrajItems,
+        PanelId::MetrajAssignments,
+        PanelId::MetrajSummary,
+        PanelId::MetrajRebar,
     ];
 
     /// Localized-friendly display name used by the collapsed/edge chrome.
@@ -162,6 +196,18 @@ impl PanelId {
             PanelId::Layers => "Layer Manager",
             PanelId::Laywalk => "Layer Walk",
             PanelId::QuickCalc => "QuickCalc",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajTree => "Metraj Projesi",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajItems => "Metraj Kalemleri",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajQuantityGroups => "Grup Pozları",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajAssignments => "Metraj Atamaları",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajSummary => "Metraj İcmali",
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajRebar => "Demir Metrajı",
             PanelId::Plugin(_) => "Plugin",
         }
     }
@@ -184,6 +230,18 @@ impl PanelId {
             PanelId::Layers => include_bytes!("../../assets/icons/layers/panel.svg"),
             PanelId::Laywalk => include_bytes!("../../assets/icons/layers/laywalk.svg"),
             PanelId::QuickCalc => crate::ui::window::quick_calc::ICON,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajTree => include_bytes!("../../assets/icons/report.svg"),
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajItems => include_bytes!("../../assets/icons/measure.svg"),
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajQuantityGroups => include_bytes!("../../assets/icons/table.svg"),
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajAssignments => include_bytes!("../../assets/icons/metraj_assign.svg"),
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajSummary => include_bytes!("../../assets/icons/table.svg"),
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajRebar => include_bytes!("../../assets/icons/measure.svg"),
             PanelId::Plugin(_) => crate::ui::icons::MORE,
         }
     }
@@ -204,6 +262,14 @@ impl PanelId {
             PanelId::Layers => 560.0,
             PanelId::Laywalk => 420.0,
             PanelId::QuickCalc => 320.0,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajTree => 340.0,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajSummary => 380.0,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajRebar => 360.0,
+            PanelId::MetrajItems | PanelId::MetrajAssignments => 320.0,
+            PanelId::MetrajQuantityGroups => 300.0,
             PanelId::Plugin(_) => 280.0,
         }
     }

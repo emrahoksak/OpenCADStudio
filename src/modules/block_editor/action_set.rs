@@ -52,7 +52,12 @@ impl ActionSetCommand {
                 at: actions::v(a.display_location),
                 // Native grip links are retained by retargeting, while this
                 // command edits the geometric selection only.
-                targets: a.dependencies.iter().copied().filter(|handle| doc.get_entity(*handle).is_some()).collect(),
+                targets: a
+                    .dependencies
+                    .iter()
+                    .copied()
+                    .filter(|handle| doc.get_entity(*handle).is_some())
+                    .collect(),
                 stretch: actions::needs_frame(kind),
                 polar: kind == actions::Kind::PolarStretch,
                 expected: doc.objects[&handle].clone(),

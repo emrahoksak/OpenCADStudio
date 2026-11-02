@@ -50,7 +50,9 @@ impl OpenCADStudio {
             return Task::none();
         }
         if perpendicular && kind != crate::scene::block_orientation_parameter::Kind::Alignment {
-            self.command_line.push_error(crate::t!("Alignment type is only available for Alignment parameters.").as_ref());
+            self.command_line.push_error(
+                crate::t!("Alignment type is only available for Alignment parameters.").as_ref(),
+            );
             return Task::none();
         }
         self.push_undo_snapshot(i, &format!("{} parameter", kind.name()));
@@ -77,8 +79,13 @@ impl OpenCADStudio {
             .expect("validated Rotation grip count");
         }
         if perpendicular {
-            crate::scene::block_orientation_parameter::set_alignment_type(&mut self.tabs[i].scene.document, definition, parameter, true)
-                .expect("validated Alignment parameter placement");
+            crate::scene::block_orientation_parameter::set_alignment_type(
+                &mut self.tabs[i].scene.document,
+                definition,
+                parameter,
+                true,
+            )
+            .expect("validated Alignment parameter placement");
         }
         self.tabs[i].scene.bump_geometry();
         self.tabs[i].dirty = true;
@@ -461,7 +468,9 @@ impl OpenCADStudio {
             }
             "BACTIONSET" => Some(self.start_block_action_set()),
             "BASSOCIATE" => Some(self.start_block_action_association()),
-            cmd if cmd=="BACTIONBAR" || cmd.starts_with("BACTIONBAR ") => Some(self.start_action_bar_command(cmd.strip_prefix("BACTIONBAR").unwrap().trim())),
+            cmd if cmd == "BACTIONBAR" || cmd.starts_with("BACTIONBAR ") => {
+                Some(self.start_action_bar_command(cmd.strip_prefix("BACTIONBAR").unwrap().trim()))
+            }
             cmd if cmd == "BACTION"
                 || cmd.starts_with("BACTION ")
                 || cmd == "BACTIONTOOL"
@@ -470,13 +479,11 @@ impl OpenCADStudio {
                 || cmd.starts_with("BARRAY ") =>
             {
                 Some(
-                    self.start_block_action(
-                        if cmd == "BARRAY" || cmd.starts_with("BARRAY ") {
-                            "ARRAY"
-                        } else {
-                            cmd.split_once(' ').map_or("", |(_, args)| args.trim())
-                        },
-                    ),
+                    self.start_block_action(if cmd == "BARRAY" || cmd.starts_with("BARRAY ") {
+                        "ARRAY"
+                    } else {
+                        cmd.split_once(' ').map_or("", |(_, args)| args.trim())
+                    }),
                 )
             }
             cmd if cmd == "BLOOKUPTABLE" || cmd.starts_with("BLOOKUPTABLE ") => {
@@ -484,7 +491,8 @@ impl OpenCADStudio {
             }
             cmd if cmd == "BTABLE"
                 || cmd == "BPROPERTIESTABLE"
-                || cmd.starts_with("BPROPERTIESTABLE ") => {
+                || cmd.starts_with("BPROPERTIESTABLE ") =>
+            {
                 Some(self.open_block_properties_table())
             }
             "RESETBLOCK" | "RESETBLOCK APPLY" => {
@@ -727,12 +735,11 @@ impl OpenCADStudio {
                     .unwrap_or_default();
                 self.open_lookup_table(&name)
             }
-            Some(command) if command.starts_with("BACTION ") => {
-                self.start_block_action_for_parameter(
+            Some(command) if command.starts_with("BACTION ") => self
+                .start_block_action_for_parameter(
                     command.trim_start_matches("BACTION "),
                     parameter,
-                )
-            }
+                ),
             Some(command) => self.dispatch_command(command),
             None => Task::none(),
         }

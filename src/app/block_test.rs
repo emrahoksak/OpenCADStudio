@@ -149,9 +149,10 @@ impl OpenCADStudio {
                     crate::scene::block_actions::all_parameters(&tab.scene.document, definition)
                         .into_iter()
                         .filter(|parameter| {
-                            parameter.grip != codec::Handle::NULL && actions
-                                .iter()
-                                .any(|(_, _, _, parameter_id)| *parameter_id == parameter.id)
+                            parameter.grip != codec::Handle::NULL
+                                && actions
+                                    .iter()
+                                    .any(|(_, _, _, parameter_id)| *parameter_id == parameter.id)
                         })
                         .filter_map(|parameter| {
                             let value =

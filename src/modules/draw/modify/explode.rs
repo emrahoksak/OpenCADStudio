@@ -904,7 +904,12 @@ fn as_circular_piece(curve: &kernel::geom2d::Curve) -> Option<CircularPiece> {
         Curve::Arc(arc) if arc.radius > 1e-12 => {
             let centre = arc.centre;
             let radius = arc.radius;
-            let pt_at = |ang: f64| [centre[0] + radius * ang.cos(), centre[1] + radius * ang.sin()];
+            let pt_at = |ang: f64| {
+                [
+                    centre[0] + radius * ang.cos(),
+                    centre[1] + radius * ang.sin(),
+                ]
+            };
             let start_pt = pt_at(arc.start_angle);
             let end_pt = pt_at(arc.end_angle);
             let diff = (arc.end_angle - arc.start_angle).abs();
@@ -945,9 +950,11 @@ fn as_circular_piece(curve: &kernel::geom2d::Curve) -> Option<CircularPiece> {
                     diff
                 };
                 let mid_pt = if (sweep - std::f64::consts::TAU).abs() <= 1e-6 {
-                    arc.ellipse.point_at(arc.start_parameter + std::f64::consts::PI)
+                    arc.ellipse
+                        .point_at(arc.start_parameter + std::f64::consts::PI)
                 } else {
-                    arc.ellipse.point_at((arc.start_parameter + arc.end_parameter) * 0.5)
+                    arc.ellipse
+                        .point_at((arc.start_parameter + arc.end_parameter) * 0.5)
                 };
                 Some(CircularPiece {
                     centre,
@@ -965,13 +972,18 @@ fn as_circular_piece(curve: &kernel::geom2d::Curve) -> Option<CircularPiece> {
             let p0 = nurbs.point_at(0.0);
             let p1 = nurbs.point_at(0.5);
             let p2 = nurbs.point_at(1.0);
-            let d = 2.0 * (p0[0] * (p1[1] - p2[1]) + p1[0] * (p2[1] - p0[1]) + p2[0] * (p0[1] - p1[1]));
+            let d =
+                2.0 * (p0[0] * (p1[1] - p2[1]) + p1[0] * (p2[1] - p0[1]) + p2[0] * (p0[1] - p1[1]));
             if d.abs() > 1e-12 {
                 let p0_sq = p0[0] * p0[0] + p0[1] * p0[1];
                 let p1_sq = p1[0] * p1[0] + p1[1] * p1[1];
                 let p2_sq = p2[0] * p2[0] + p2[1] * p2[1];
-                let cx = (p0_sq * (p1[1] - p2[1]) + p1_sq * (p2[1] - p0[1]) + p2_sq * (p0[1] - p1[1])) / d;
-                let cy = (p0_sq * (p2[0] - p1[0]) + p1_sq * (p0[0] - p2[0]) + p2_sq * (p1[0] - p0[0])) / d;
+                let cx =
+                    (p0_sq * (p1[1] - p2[1]) + p1_sq * (p2[1] - p0[1]) + p2_sq * (p0[1] - p1[1]))
+                        / d;
+                let cy =
+                    (p0_sq * (p2[0] - p1[0]) + p1_sq * (p0[0] - p2[0]) + p2_sq * (p1[0] - p0[0]))
+                        / d;
                 let r = (p0[0] - cx).hypot(p0[1] - cy);
                 if r > 1e-12 {
                     let tol = 1e-5 * (1.0 + r);
@@ -1055,7 +1067,10 @@ fn append_region_loops(
         EntityType::Circle(circle)
     };
 
-    let make_ellipse = |ellipse: &kernel::geom2d::Ellipse, start_param: f64, end_param: f64| -> Option<EntityType> {
+    let make_ellipse = |ellipse: &kernel::geom2d::Ellipse,
+                        start_param: f64,
+                        end_param: f64|
+     -> Option<EntityType> {
         if ellipse.major_radius <= 1e-12 || ellipse.minor_radius <= 1e-12 {
             return None;
         }
@@ -1125,7 +1140,8 @@ fn append_region_loops(
 
     for ring in loops {
         // Collapse a closed loop of circular arcs/curves into one Circle.
-        let circular_pieces: Vec<CircularPiece> = ring.iter().filter_map(as_circular_piece).collect();
+        let circular_pieces: Vec<CircularPiece> =
+            ring.iter().filter_map(as_circular_piece).collect();
         if circular_pieces.len() == ring.len() && !circular_pieces.is_empty() {
             let first = &circular_pieces[0];
             let tol = 1e-5 * (1.0 + first.radius);

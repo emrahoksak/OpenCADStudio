@@ -1756,7 +1756,9 @@ impl OpenCADStudio {
                             .into_iter()
                             .flatten()
                             .filter_map(|update| update["path"].as_str())
-                            .find(|path| *path == "/insert_handles" || path.starts_with("/insert_handles/"))
+                            .find(|path| {
+                                *path == "/insert_handles" || path.starts_with("/insert_handles/")
+                            })
                         {
                             return Err(failure(
                                 "invalid_update",
@@ -2302,10 +2304,7 @@ mod tests {
             &[members[1]],
             false,
         );
-        crate::scene::block_visibility::finish_editing(
-            &mut app.tabs[i].scene.document,
-            definition,
-        );
+        crate::scene::block_visibility::finish_editing(&mut app.tabs[i].scene.document, definition);
 
         let insert = app.tabs[i].scene.add_entity(EntityType::Insert(Insert::new(
             "DOOR_DYN",

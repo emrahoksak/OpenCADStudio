@@ -117,6 +117,7 @@ iced_widget = { git = "https://github.com/iced-rs/iced.git", rev = "23604ff22ab0
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rusqlite = { version = "0.41.1", features = ["bundled"] }
 getrandom = "0.3"
 ocs_plugin_api = { path = "crates/ocs_plugin_api", features = ["host"] }
 bincode = "1.3"

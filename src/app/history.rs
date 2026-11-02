@@ -359,14 +359,23 @@ impl OpenCADStudio {
             .chain(sets_after)
             .map(|set| set.scope)
         {
-            if parametric_constraints.iter().any(|entry| entry.scope == scope) {
+            if parametric_constraints
+                .iter()
+                .any(|entry| entry.scope == scope)
+            {
                 continue;
             }
-            let find = |sets: &[crate::scene::parametric_constraints::ParametricConstraintSet]| {
-                sets.iter().find(|set| set.scope == scope).cloned().unwrap_or_else(|| {
-                    crate::scene::parametric_constraints::ParametricConstraintSet::new(scope)
-                })
-            };
+            let find =
+                |sets: &[crate::scene::parametric_constraints::ParametricConstraintSet]| {
+                    sets.iter()
+                        .find(|set| set.scope == scope)
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            crate::scene::parametric_constraints::ParametricConstraintSet::new(
+                                scope,
+                            )
+                        })
+                };
             let before = find(&pending.parametric_constraints_before);
             let after = find(sets_after);
             if before.constraints != after.constraints {
@@ -1426,10 +1435,7 @@ impl OpenCADStudio {
                     // delta rides to the redo stack (it still holds the after
                     // side) — no current-state capture needed.
                     layer_panel_changed |= d.structure.as_ref().is_some_and(|structure| {
-                        matches!(
-                            structure,
-                            StructureSnapshot::Layers(_)
-                        ) || structure.is_full()
+                        matches!(structure, StructureSnapshot::Layers(_)) || structure.is_full()
                     }) || d.active_layer.is_some()
                         || d.entities.iter().any(|(_, before, after)| {
                             before
@@ -1496,10 +1502,7 @@ impl OpenCADStudio {
                     native_graph_changed |=
                         !d.parametric_constraints.is_empty() || d.named_parameters.is_some();
                     layer_panel_changed |= d.structure.as_ref().is_some_and(|structure| {
-                        matches!(
-                            structure,
-                            StructureSnapshot::Layers(_)
-                        ) || structure.is_full()
+                        matches!(structure, StructureSnapshot::Layers(_)) || structure.is_full()
                     }) || d.active_layer.is_some()
                         || d.entities.iter().any(|(_, before, after)| {
                             before

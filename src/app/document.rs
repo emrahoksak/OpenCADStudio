@@ -471,7 +471,10 @@ impl DocumentTab {
         if degraded {
             (Vec::new(), Vec::new())
         } else {
-            (entities.into_iter().collect(), records.into_iter().collect())
+            (
+                entities.into_iter().collect(),
+                records.into_iter().collect(),
+            )
         }
     }
 

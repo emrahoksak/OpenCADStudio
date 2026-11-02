@@ -169,9 +169,8 @@ impl super::OpenCADStudio {
         }
         // A table edits its first cell on the command line.
         if let Some(EntityType::Table(table)) = self.tabs[i].scene.document.get_entity(target) {
-            let command = crate::modules::annotate::table_cmd::TableCellEditCommand::new(
-                target, table, 0, 0,
-            );
+            let command =
+                crate::modules::annotate::table_cmd::TableCellEditCommand::new(target, table, 0, 0);
             self.command_line
                 .push_info(&crate::command::CadCommand::prompt(&command));
             self.tabs[i].active_cmd = Some(Box::new(command));

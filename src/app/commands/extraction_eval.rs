@@ -149,7 +149,10 @@ impl OpenCADStudio {
     pub(super) fn dispatch_dxeval(&mut self, cmd: &str, i: usize) -> Option<Task<Message>> {
         let rest = cmd.strip_prefix("SETVAR ").map(str::trim).unwrap_or(cmd);
         let (name, value) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-        if !name.trim_start_matches(['_', '.']).eq_ignore_ascii_case("DXEVAL") {
+        if !name
+            .trim_start_matches(['_', '.'])
+            .eq_ignore_ascii_case("DXEVAL")
+        {
             return None;
         }
         let current = annotation_data::dxeval(&self.tabs[i].scene.document);
@@ -168,9 +171,8 @@ impl OpenCADStudio {
             _ => {
                 if !value.is_empty() {
                     let (min, max) = (0, 511);
-                    self.command_line.push_error(&crate::tf!(
-                        "Requires an integer between {min} and {max}."
-                    ));
+                    self.command_line
+                        .push_error(&crate::tf!("Requires an integer between {min} and {max}."));
                 }
                 self.command_line
                     .push_output(&format!("Enter new value for DXEVAL <{current}>:"));

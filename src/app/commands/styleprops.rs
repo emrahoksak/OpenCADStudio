@@ -316,7 +316,9 @@ impl OpenCADStudio {
                         );
 
                     let pick = |list: Vec<String>, kind: usize| -> Vec<String> {
-                        list.into_iter().filter(|n| wanted(n) && chosen(kind, n)).collect()
+                        list.into_iter()
+                            .filter(|n| wanted(n) && chosen(kind, n))
+                            .collect()
                     };
                     let layer_remove = pick(layer_remove, 0);
                     let style_remove = pick(style_remove, 1);
@@ -727,8 +729,9 @@ impl OpenCADStudio {
                     .collect();
                 let dialog = cmd == "OVERKILL";
                 if dialog && !handles.is_empty() {
-                    let settings =
-                        *overkill::remembered().lock().unwrap_or_else(|e| e.into_inner());
+                    let settings = *overkill::remembered()
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     self.overkill_dialog = Some(crate::ui::window::overkill::State::new(settings));
                     self.active_modal = Some(crate::app::ModalKind::Overkill);
                 } else {
@@ -2565,10 +2568,10 @@ impl OpenCADStudio {
                                             self.sync_model_space_theme(false);
                                             Ok((format!("VSEDGECOLOR = {}", shown(rgb)), true))
                                         }
-                                        None => Err(
-                                            "SETVAR: a colour index, name or R,G,B required."
-                                                .into(),
-                                        ),
+                                        None => {
+                                            Err("SETVAR: a colour index, name or R,G,B required."
+                                                .into())
+                                        }
                                     },
                                     None => Ok((
                                         format!(
@@ -4161,9 +4164,8 @@ impl OpenCADStudio {
             if type_str == "LAYER" {
                 self.refresh_layer_panel();
             }
-            self.command_line.push_output(
-                crate::tf!("RENAME: '{}' → '{}'.", old_name, new_name).as_ref(),
-            );
+            self.command_line
+                .push_output(crate::tf!("RENAME: '{}' → '{}'.", old_name, new_name).as_ref());
         } else {
             self.discard_last_undo_entry(i);
             if let Some(message) = block_error {

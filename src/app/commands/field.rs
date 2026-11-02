@@ -199,7 +199,9 @@ impl OpenCADStudio {
         let document = &self.tabs[i].scene.document;
         if let Some(state) = self.field_dialog.as_mut() {
             let property = state.seed_from_code(&code, &objects);
-            let object = objects.first().and_then(|handle| document.get_entity(*handle));
+            let object = objects
+                .first()
+                .and_then(|handle| document.get_entity(*handle));
             if let (Some(property), Some(entity)) = (property, object) {
                 let props = object_properties(entity);
                 state.object = Some((
@@ -677,7 +679,9 @@ mod tests {
         square.is_closed = true;
         let document = &mut app.tabs[i].scene.document;
         let polyline = document.add_entity(EntityType::LwPolyline(square)).unwrap();
-        let text = document.add_entity(EntityType::MText(Box::new(MText::new()))).unwrap();
+        let text = document
+            .add_entity(EntityType::MText(Box::new(MText::new())))
+            .unwrap();
         crate::entities::field::set_text_field(
             document,
             text,

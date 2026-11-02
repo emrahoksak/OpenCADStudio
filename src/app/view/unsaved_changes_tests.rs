@@ -64,11 +64,7 @@ fn block_close_dialog_explains_the_risk_and_counts_references() {
     with_ui_test(|| {
         let app = dirty_definition_edit();
         assert_eq!(app.modal_title(), "Block - Save Parameter Changes?");
-        let mut ui = Simulator::with_size(
-            iced::Settings::default(),
-            (900.0, 700.0),
-            dialog(&app),
-        );
+        let mut ui = Simulator::with_size(iced::Settings::default(), (900.0, 700.0), dialog(&app));
         visible(&mut ui, "Save changes to EDIT_ME?");
         visible(
             &mut ui,

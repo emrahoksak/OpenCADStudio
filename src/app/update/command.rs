@@ -3,9 +3,7 @@
 #![allow(unused_imports)]
 use super::util::*;
 use super::{format_size, VIEWCUBE_HIT_SIZE};
-use crate::app::helpers::{
-    parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind,
-};
+use crate::app::helpers::{parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind};
 use crate::app::TextEntryMode;
 use crate::app::{Message, OpenCADStudio, POLY_START_DELAY_MS};
 use crate::modules::ModuleEvent;
@@ -2743,7 +2741,8 @@ impl OpenCADStudio {
         value: String,
     ) -> Task<Message> {
         let value = if field == "transparency" {
-            let Some(transparency) = crate::scene::creation_style::parse_current_transparency(&value)
+            let Some(transparency) =
+                crate::scene::creation_style::parse_current_transparency(&value)
             else {
                 self.command_line.push_error(
                     "Transparency: expected ByLayer, ByBlock, or an integer from 0 to 90.",
@@ -2759,7 +2758,9 @@ impl OpenCADStudio {
         } else {
             value
         };
-        if field == "authoring_alignment_type" { return self.set_authoring_alignment_type(&value); }
+        if field == "authoring_alignment_type" {
+            return self.set_authoring_alignment_type(&value);
+        }
         if field.starts_with("bedit_") {
             return self.set_block_property(field, &value);
         }
@@ -3517,9 +3518,24 @@ impl OpenCADStudio {
                     if self.tabs[i].scene.is_layer_locked(handle) {
                         continue;
                     }
-                    let result = if let Some(test) = self.tabs[i].block_test.as_ref().filter(|test| test.insert == handle) {
-                        crate::scene::block_lookup::evaluate_test_choice(&self.tabs[i].scene.document, &test.baseline, handle, &value)
-                    } else { crate::scene::block_lookup::evaluate_reference_choice(&self.tabs[i].scene.document, handle, &value) };
+                    let result = if let Some(test) = self.tabs[i]
+                        .block_test
+                        .as_ref()
+                        .filter(|test| test.insert == handle)
+                    {
+                        crate::scene::block_lookup::evaluate_test_choice(
+                            &self.tabs[i].scene.document,
+                            &test.baseline,
+                            handle,
+                            &value,
+                        )
+                    } else {
+                        crate::scene::block_lookup::evaluate_reference_choice(
+                            &self.tabs[i].scene.document,
+                            handle,
+                            &value,
+                        )
+                    };
                     match result {
                         Ok(Some(staged)) => {
                             self.apply_action_document(i, staged);
@@ -4095,8 +4111,12 @@ impl OpenCADStudio {
             }
             return Task::none();
         }
-        if field == "authoring_grip_count" { return self.commit_block_grip_count(); }
-        if field.starts_with("authoring_display_grip_") { return self.commit_native_grip_location(field); }
+        if field == "authoring_grip_count" {
+            return self.commit_block_grip_count();
+        }
+        if field.starts_with("authoring_display_grip_") {
+            return self.commit_native_grip_location(field);
+        }
         if field.starts_with("authoring_action_") {
             return self.commit_authoring_action_option(field);
         }
@@ -4186,7 +4206,8 @@ impl OpenCADStudio {
                     }
                 }
                 if field.starts_with("ole_") {
-                    if let Err(message) = crate::entities::ole2frame::validate_property(field, &val) {
+                    if let Err(message) = crate::entities::ole2frame::validate_property(field, &val)
+                    {
                         self.command_line.push_error(message);
                         return Task::none();
                     }

@@ -157,6 +157,8 @@ pub struct PlineCommand {
     /// being placed. (#119)
     live_handle: Option<Handle>,
     plane: WorkingPlane,
+    /// MM finishes as a closed mahal boundary; ordinary PLINE keeps its open finish.
+    metraj_boundary: bool,
 }
 
 impl PlineCommand {
@@ -172,7 +174,14 @@ impl PlineCommand {
             last_tangent: None,
             live_handle: None,
             plane: WorkingPlane::default(),
+            metraj_boundary: false,
         }
+    }
+
+    pub fn new_metraj() -> Self {
+        let mut command = Self::new();
+        command.metraj_boundary = true;
+        command
     }
 
     /// Drop the last placed vertex but keep drawing (#352): the U option and
@@ -1000,6 +1009,13 @@ impl CadCommand for PlineCommand {
             Sub::None => {}
             _ => return self.leave_sub(),
         }
+        if self.metraj_boundary {
+            return if self.vertices.len() >= 3 {
+                self.close()
+            } else {
+                CmdResult::NeedPoint
+            };
+        }
         // Every landed vertex is already published into the live document
         // entity. Finishing must only close its history/command state; replacing
         // the identical polyline again would advance geometry_epoch and make
@@ -1020,6 +1036,9 @@ impl CadCommand for PlineCommand {
         if self.sub != Sub::None {
             return self.leave_sub();
         }
+        if self.metraj_boundary && self.vertices.len() >= 3 {
+            return self.close();
+        }
         match self.live_handle {
             Some(handle) => CmdResult::FinalizeLiveEntity(handle),
             None => CmdResult::Cancel,
@@ -1027,6 +1046,9 @@ impl CadCommand for PlineCommand {
     }
 
     fn on_space_change(&mut self) -> CmdResult {
+        if self.metraj_boundary && self.vertices.len() >= 3 {
+            return self.close();
+        }
         match self.live_handle {
             Some(handle) => CmdResult::FinalizeLiveEntity(handle),
             None => CmdResult::Cancel,

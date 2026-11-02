@@ -48,13 +48,33 @@ pub const LIBRARY: &[Spec] = &[
     host("Select", "Select", &[l("objects")], OBJECTS),
     // ── Query ────────────────────────────────────────────────────────────
     host("Object Type", "Query", &[v("object")], &["type"]),
-    host("Get Property", "Query", &[v("object"), s("property", "Layer")], &["value"]),
-    host("Set Property", "Query", &[v("object"), s("property", "Layer"), v("value")], OBJECT),
+    host(
+        "Get Property",
+        "Query",
+        &[v("object"), s("property", "Layer")],
+        &["value"],
+    ),
+    host(
+        "Set Property",
+        "Query",
+        &[v("object"), s("property", "Layer"), v("value")],
+        OBJECT,
+    ),
     // ── Create ───────────────────────────────────────────────────────────
-    host("Polyline By Points", "Create", &[l("points"), b("closed", false)], OBJECT),
+    host(
+        "Polyline By Points",
+        "Create",
+        &[l("points"), b("closed", false)],
+        OBJECT,
+    ),
     host("Spline By Points", "Create", &[l("points")], OBJECT),
     host("3D Polyline By Points", "Create", &[l("points")], OBJECT),
-    host("Aligned Dimension", "Create", &[v("first"), v("second"), v("location")], OBJECT),
+    host(
+        "Aligned Dimension",
+        "Create",
+        &[v("first"), v("second"), v("location")],
+        OBJECT,
+    ),
     host(
         "Linear Dimension",
         "Create",
@@ -70,24 +90,69 @@ pub const LIBRARY: &[Spec] = &[
     host(
         "Block Reference",
         "Create",
-        &[s("block", ""), v("point"), n("scale", 1.0), n("rotation", 0.0)],
+        &[
+            s("block", ""),
+            v("point"),
+            n("scale", 1.0),
+            n("rotation", 0.0),
+        ],
         OBJECT,
     ),
     // ── Modify ───────────────────────────────────────────────────────────
     host("Move", "Modify", &[v("object"), v("vector")], OBJECT),
-    host("Rotate", "Modify", &[v("object"), v("center"), n("angle", 90.0)], OBJECT),
-    host("Scale", "Modify", &[v("object"), v("center"), n("factor", 2.0)], OBJECT),
-    host("Mirror", "Modify", &[v("object"), v("first"), v("second")], OBJECT),
+    host(
+        "Rotate",
+        "Modify",
+        &[v("object"), v("center"), n("angle", 90.0)],
+        OBJECT,
+    ),
+    host(
+        "Scale",
+        "Modify",
+        &[v("object"), v("center"), n("factor", 2.0)],
+        OBJECT,
+    ),
+    host(
+        "Mirror",
+        "Modify",
+        &[v("object"), v("first"), v("second")],
+        OBJECT,
+    ),
     host("Copy", "Modify", &[v("object"), v("vector")], OBJECT),
-    host("Offset", "Modify", &[v("object"), n("distance", 1.0), v("side")], OBJECTS),
+    host(
+        "Offset",
+        "Modify",
+        &[v("object"), n("distance", 1.0), v("side")],
+        OBJECTS,
+    ),
     // ── Curve ────────────────────────────────────────────────────────────
     host("Curve Length", "Curve", &[v("curve")], RESULT),
     host("Curve Area", "Curve", &[v("curve")], RESULT),
     host("Curve Endpoints", "Curve", &[v("curve")], &["start", "end"]),
-    host("Point At Parameter", "Curve", &[v("curve"), n("t", 0.5)], POINT),
-    host("Point At Distance", "Curve", &[v("curve"), n("distance", 0.0)], POINT),
-    host("Parameter At Point", "Curve", &[v("curve"), v("point")], &["t"]),
-    host("Divide Curve", "Curve", &[v("curve"), n("count", 10.0)], &["points"]),
+    host(
+        "Point At Parameter",
+        "Curve",
+        &[v("curve"), n("t", 0.5)],
+        POINT,
+    ),
+    host(
+        "Point At Distance",
+        "Curve",
+        &[v("curve"), n("distance", 0.0)],
+        POINT,
+    ),
+    host(
+        "Parameter At Point",
+        "Curve",
+        &[v("curve"), v("point")],
+        &["t"],
+    ),
+    host(
+        "Divide Curve",
+        "Curve",
+        &[v("curve"), n("count", 10.0)],
+        &["points"],
+    ),
     host("Intersect", "Curve", &[v("a"), v("b")], &["points"]),
 ];
 
@@ -122,7 +187,8 @@ fn same_plane(a: &kernel::space::Plane, b: &kernel::space::Plane) -> bool {
 impl AppHost<'_> {
     pub(super) fn op(&mut self, _node: NodeId, spec: &'static Spec, a: &[Value]) -> Vec<Value> {
         let one = |value: Value| vec![value];
-        let objects = |handles: Vec<Handle>| vec![Value::Array(handles.into_iter().map(object).collect())];
+        let objects =
+            |handles: Vec<Handle>| vec![Value::Array(handles.into_iter().map(object).collect())];
         match spec.name {
             "Selected Objects" => objects(
                 self.scene()
@@ -134,7 +200,9 @@ impl AppHost<'_> {
             "All Objects" => objects(self.space(|_| true)),
             "Objects By Type" => {
                 let kind = text(&a[0]);
-                objects(self.space(|entity| crate::app::automation::entity_type_matches(entity, &kind)))
+                objects(
+                    self.space(|entity| crate::app::automation::entity_type_matches(entity, &kind)),
+                )
             }
             "Objects By Layer" => {
                 let layer = text(&a[0]);
@@ -148,15 +216,12 @@ impl AppHost<'_> {
                 self.app.refresh_properties();
                 objects(handles)
             }
-            "Object Type" => one(
-                self.entity(&a[0])
-                    .map_or(Value::Null, |entity| json!(crate::entities::names::ui_name(entity))),
-            ),
-            "Get Property" => one(
-                handle(&a[0])
-                    .and_then(|h| self.app.graph_field(self.i, h, &text(&a[1])))
-                    .map_or(Value::Null, |(_, value)| value),
-            ),
+            "Object Type" => one(self.entity(&a[0]).map_or(Value::Null, |entity| {
+                json!(crate::entities::names::ui_name(entity))
+            })),
+            "Get Property" => one(handle(&a[0])
+                .and_then(|h| self.app.graph_field(self.i, h, &text(&a[1])))
+                .map_or(Value::Null, |(_, value)| value)),
             "Set Property" => {
                 let Some(h) = handle(&a[0]) else {
                     return one(Value::Null);
@@ -209,13 +274,15 @@ impl AppHost<'_> {
             "Linear Dimension" => one(match (vec3(&a[0]), vec3(&a[1]), vec3(&a[2])) {
                 (Some(first), Some(second), Some(location)) if first != second => {
                     let (sin, cos) = num(&a[3]).unwrap_or(0.0).to_radians().sin_cos();
-                    self.create(crate::modules::annotate::linear_dim::linear_dimension_entity(
-                        first,
-                        second,
-                        location,
-                        DVec3::new(cos, sin, 0.0),
-                        None,
-                    ))
+                    self.create(
+                        crate::modules::annotate::linear_dim::linear_dimension_entity(
+                            first,
+                            second,
+                            location,
+                            DVec3::new(cos, sin, 0.0),
+                            None,
+                        ),
+                    )
                 }
                 _ => Value::Null,
             }),
@@ -292,17 +359,24 @@ impl AppHost<'_> {
                     return objects(Vec::new());
                 };
                 let side = glam::Vec3::new(side[0] as f32, side[1] as f32, side[2] as f32);
-                let results =
-                    crate::modules::draw::modify::offset::compute_offsets(&entity, distance.abs(), side);
+                let results = crate::modules::draw::modify::offset::compute_offsets(
+                    &entity,
+                    distance.abs(),
+                    side,
+                );
                 vec![Value::Array(
-                    results.into_iter().map(|entity| self.create(entity)).collect(),
+                    results
+                        .into_iter()
+                        .map(|entity| self.create(entity))
+                        .collect(),
                 )]
             }
-            "Curve Length" => one(self.curve(&a[0]).map_or(Value::Null, |c| number(c.length()))),
-            "Curve Area" => one(
-                self.curve(&a[0])
-                    .map_or(Value::Null, |c| number(c.curve.enclosed_area().abs())),
-            ),
+            "Curve Length" => one(self
+                .curve(&a[0])
+                .map_or(Value::Null, |c| number(c.length()))),
+            "Curve Area" => one(self
+                .curve(&a[0])
+                .map_or(Value::Null, |c| number(c.curve.enclosed_area().abs()))),
             "Curve Endpoints" => match self.curve(&a[0]) {
                 Some(c) => vec![point_value(c.point_at(0.0)), point_value(c.point_at(1.0))],
                 None => vec![Value::Null; 2],
@@ -324,7 +398,9 @@ impl AppHost<'_> {
                     let (count, length) = ((count as usize).min(MAX_ITEMS), c.length());
                     Value::Array(
                         (0..=count)
-                            .map(|k| point_value(c.point_at_distance(length * k as f64 / count as f64)))
+                            .map(|k| {
+                                point_value(c.point_at_distance(length * k as f64 / count as f64))
+                            })
                             .collect(),
                     )
                 }
@@ -390,8 +466,7 @@ impl AppHost<'_> {
 
     /// [`create`](Self::create) from an `entities_create` definition.
     fn build(&mut self, definition: Value) -> Value {
-        let built =
-            crate::entity_creation::build_entity(&definition, Some(&self.scene().document));
+        let built = crate::entity_creation::build_entity(&definition, Some(&self.scene().document));
         built.map_or(Value::Null, |entity| self.create(entity))
     }
 

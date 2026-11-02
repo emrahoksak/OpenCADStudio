@@ -1870,12 +1870,11 @@ impl OpenCADStudio {
             }
 
             "DATALINKUPDATE" => {
-                let names = crate::app::annotation_data::data_link_entries(
-                    &self.tabs[i].scene.document,
-                )
-                .into_iter()
-                .map(|(name, _)| name)
-                .collect();
+                let names =
+                    crate::app::annotation_data::data_link_entries(&self.tabs[i].scene.document)
+                        .into_iter()
+                        .map(|(name, _)| name)
+                        .collect();
                 let command =
                     crate::modules::annotate::data_link::DataLinkUpdateCommand::new(names);
                 self.command_line.push_info(&command.prompt());
@@ -1935,9 +1934,8 @@ impl OpenCADStudio {
                         _ => Some(*link) == wanted_link,
                     })
                     .collect();
-                self.command_line.push_output(
-                    crate::tf!("{} object(s) found.", jobs.len()).as_ref(),
-                );
+                self.command_line
+                    .push_output(crate::tf!("{} object(s) found.", jobs.len()).as_ref());
                 if write {
                     let mut refused = 0usize;
                     let mut written = 0usize;
@@ -1996,10 +1994,7 @@ impl OpenCADStudio {
                         ) {
                             Some(rows) => (rows, 1),
                             None => (
-                                crate::app::annotation_data::read_data_link(
-                                    document,
-                                    *link_handle,
-                                ),
+                                crate::app::annotation_data::read_data_link(document, *link_handle),
                                 0,
                             ),
                         };
@@ -2017,11 +2012,7 @@ impl OpenCADStudio {
                     );
                 }
                 self.command_line.push_output(
-                    crate::tf!(
-                        "{} object(s) updated successfully.",
-                        updated
-                    )
-                    .as_ref(),
+                    crate::tf!("{} object(s) updated successfully.", updated).as_ref(),
                 );
             }
 

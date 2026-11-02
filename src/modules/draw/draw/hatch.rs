@@ -1454,12 +1454,7 @@ impl BoundaryCommand {
                 })
                 .collect();
         }
-        crate::scene::boundary_polyline_entities(
-            &self.point_regions,
-            self.plane,
-            sources,
-            1.0e-6,
-        )
+        crate::scene::boundary_polyline_entities(&self.point_regions, self.plane, sources, 1.0e-6)
     }
 }
 
@@ -1491,7 +1486,11 @@ impl CadCommand for BoundaryCommand {
                 t!("%{cmd}  Select objects:", cmd = self.name()).into_owned()
             }
             BoundaryMode::GapTolerance { .. } => {
-                format!("BOUNDARY  {} <{}>:", t!("Gap tolerance"), self.gap_tolerance)
+                format!(
+                    "BOUNDARY  {} <{}>:",
+                    t!("Gap tolerance"),
+                    self.gap_tolerance
+                )
             }
         }
     }

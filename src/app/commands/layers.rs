@@ -568,10 +568,7 @@ impl OpenCADStudio {
                 let command = KeywordCommand::new(
                     "LAYISO SETTINGS",
                     "LAYISO  Settings [Off / Lock and Fade]:",
-                    vec![
-                        ("Off", "OFF", None),
-                        ("Lock and Fade", "LOCKANDFADE", None),
-                    ],
+                    vec![("Off", "OFF", None), ("Lock and Fade", "LOCKANDFADE", None)],
                 );
                 self.command_line.push_info(&command.prompt());
                 self.command_line.set_step_options(command.options());
@@ -708,12 +705,7 @@ impl OpenCADStudio {
                 }
                 self.tabs[i].layiso_state = None;
                 self.commit_layer_undo(i, undo);
-                self.record_layiso_history(
-                    i,
-                    history_len,
-                    layiso_history_before,
-                    None,
-                );
+                self.record_layiso_history(i, history_len, layiso_history_before, None);
                 self.refresh_layer_panel();
                 self.command_line
                     .push_info(crate::t!("LAYUNISO: all layers restored.").as_ref());
@@ -1371,11 +1363,7 @@ impl OpenCADStudio {
         self.apply_layiso(i, selected_layers);
     }
 
-    fn apply_layiso(
-        &mut self,
-        i: usize,
-        selected_layers: rustc_hash::FxHashSet<String>,
-    ) {
+    fn apply_layiso(&mut self, i: usize, selected_layers: rustc_hash::FxHashSet<String>) {
         let mode = self.tabs[i].layiso_mode;
         let layiso_history_before = self.tabs[i].layiso_state.clone();
         let current_layer = self.tabs[i].active_layer.clone();
@@ -1425,14 +1413,13 @@ impl OpenCADStudio {
         let snapshots = before
             .into_iter()
             .filter_map(|(name, before)| {
-                after_by_name
-                    .get(&name)
-                    .cloned()
-                    .map(|after| crate::app::document::LayisoLayerSnapshot {
+                after_by_name.get(&name).cloned().map(|after| {
+                    crate::app::document::LayisoLayerSnapshot {
                         name,
                         before,
                         after,
-                    })
+                    }
+                })
             })
             .collect();
         let layiso_history_after = Some(crate::app::document::LayisoState {
@@ -1448,16 +1435,10 @@ impl OpenCADStudio {
         }
         let history_len = self.tabs[i].history.undo_stack.len();
         self.commit_layer_undo(i, undo);
-        self.record_layiso_history(
-            i,
-            history_len,
-            layiso_history_before,
-            layiso_history_after,
-        );
+        self.record_layiso_history(i, history_len, layiso_history_before, layiso_history_after);
         self.refresh_layer_panel();
-        self.command_line.push_info(
-            crate::tf!("LAYISO: isolated {} layer(s).", selected_layers.len()).as_ref(),
-        );
+        self.command_line
+            .push_info(crate::tf!("LAYISO: isolated {} layer(s).", selected_layers.len()).as_ref());
     }
 
     /// Restore the saved layer state `name`, returning how many layers it
@@ -1476,7 +1457,13 @@ impl OpenCADStudio {
         color: codec::types::Color,
     ) {
         use codec::objects::{KnownXRecordKind as Kind, XRecordValue as Value};
-        let Some(layer) = self.tabs[i].scene.document.layers.get(layer).map(|l| l.handle) else {
+        let Some(layer) = self.tabs[i]
+            .scene
+            .document
+            .layers
+            .get(layer)
+            .map(|l| l.handle)
+        else {
             return;
         };
         let Some(packed) = crate::scene::view::render::pack_layer_override_color(&color) else {
@@ -1494,7 +1481,9 @@ impl OpenCADStudio {
         self.tabs[i].dirty = true;
         let doc_layers = self.tabs[i].scene.document.layers.clone();
         let vp_info = self.tabs[i].scene.viewport_list();
-        self.tabs[i].layers.sync_with_viewports(&doc_layers, vp_info);
+        self.tabs[i]
+            .layers
+            .sync_with_viewports(&doc_layers, vp_info);
     }
 
     pub(in crate::app) fn restore_layer_state_here(&mut self, i: usize, name: &str) -> usize {
@@ -1550,8 +1539,10 @@ impl OpenCADStudio {
             // On / off has no per-viewport form; a layer the state turns off
             // is frozen in this viewport instead, so other viewports keep
             // their own visibility.
-            let (by_freeze, by_off) =
-                (state.mask.contains(Mask::FROZEN), state.mask.contains(Mask::ON));
+            let (by_freeze, by_off) = (
+                state.mask.contains(Mask::FROZEN),
+                state.mask.contains(Mask::ON),
+            );
             if by_freeze || by_off {
                 let hidden = (by_freeze && saved.frozen) || (by_off && saved.off);
                 if hidden { &mut freeze } else { &mut thaw }.push(layer.handle);
@@ -1627,4 +1618,3 @@ impl OpenCADStudio {
         restored
     }
 }
-

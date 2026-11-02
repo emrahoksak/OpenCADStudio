@@ -19,8 +19,7 @@ pub(crate) fn purge_pass(
     // the same rule in `block_service::protected_reason`.
     let xref_dependent = |name: &str, flagged: bool| flagged || name.contains('|');
     let insert_attributes = || {
-        doc
-            .entities()
+        doc.entities()
             .filter_map(|e| match e {
                 codec::EntityType::Insert(ins) => Some(ins.attributes.iter()),
                 _ => None,
@@ -41,10 +40,7 @@ pub(crate) fn purge_pass(
         })
         // The current layer is never purged, empty or not.
         .chain(std::iter::once(
-            doc
-                .header
-                .current_layer_name
-                .to_uppercase(),
+            doc.header.current_layer_name.to_uppercase(),
         ))
         .collect();
     // Text styles: entity references plus every dimension
@@ -60,18 +56,8 @@ pub(crate) fn purge_pass(
             _ => None,
         })
         .chain(insert_attributes().map(|a| a.text_style.clone()))
-        .chain(std::iter::once(
-            doc
-                .header
-                .current_text_style_name
-                .clone(),
-        ))
-        .chain(
-            doc
-                .dim_styles
-                .iter()
-                .map(|ds| ds.dimtxsty.clone()),
-        )
+        .chain(std::iter::once(doc.header.current_text_style_name.clone()))
+        .chain(doc.dim_styles.iter().map(|ds| ds.dimtxsty.clone()))
         .filter(|s| !s.is_empty())
         .map(|s| s.to_uppercase())
         .collect();
@@ -151,26 +137,15 @@ pub(crate) fn purge_pass(
                 Some(lt.clone())
             }
         })
-        .chain(
-            doc
-                .layers
-                .iter()
-                .map(|l| l.line_type.clone()),
-        )
-        .chain(std::iter::once(
-            doc
-                .header
-                .current_linetype_name
-                .clone(),
-        ))
+        .chain(doc.layers.iter().map(|l| l.line_type.clone()))
+        .chain(std::iter::once(doc.header.current_linetype_name.clone()))
         .filter(|s| !s.is_empty())
         .map(|s| s.to_uppercase())
         .collect();
 
     // Build removal lists (still immutable)
     let layer_remove: Vec<String> = if do_layers {
-        doc
-            .layers
+        doc.layers
             .iter()
             .filter(|l| {
                 l.name != "0"
@@ -183,8 +158,7 @@ pub(crate) fn purge_pass(
         vec![]
     };
     let style_remove: Vec<String> = if do_styles {
-        doc
-            .text_styles
+        doc.text_styles
             .iter()
             // Unnamed shape-file records serve complex linetypes
             // and are never listed for purging.
@@ -205,8 +179,7 @@ pub(crate) fn purge_pass(
     };
     let lt_remove: Vec<String> = if do_lts {
         let standard = ["Continuous", "ByLayer", "ByBlock"];
-        doc
-            .line_types
+        doc.line_types
             .iter()
             .filter(|lt| {
                 !standard.iter().any(|s| s.eq_ignore_ascii_case(&lt.name))

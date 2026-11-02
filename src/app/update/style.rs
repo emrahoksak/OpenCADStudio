@@ -3,9 +3,7 @@
 #![allow(unused_imports)]
 use super::util::*;
 use super::{format_size, VIEWCUBE_HIT_SIZE};
-use crate::app::helpers::{
-    parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind,
-};
+use crate::app::helpers::{parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind};
 use crate::app::{Message, OpenCADStudio, POLY_START_DELAY_MS};
 use crate::modules::ModuleEvent;
 use crate::scene::model::object::GripApply;
@@ -1006,11 +1004,9 @@ impl OpenCADStudio {
     ) -> Task<Message> {
         let i = self.active_tab;
         if field == "arrowhead_handle" {
-            let handle = crate::entities::arrowheads::resolve(
-                &mut self.tabs[i].scene.document,
-                &value,
-            )
-            .filter(|h| !h.is_null());
+            let handle =
+                crate::entities::arrowheads::resolve(&mut self.tabs[i].scene.document, &value)
+                    .filter(|h| !h.is_null());
             if let Some(s) = self.mleaderstyle_mut(i) {
                 s.arrowhead_handle = handle;
             }

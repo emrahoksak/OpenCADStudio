@@ -157,7 +157,10 @@ mod trim_extend_history_tests {
         // A filled hatch does not appear in entity_wires(): previously the
         // command snapshot omitted it, making every inside click a no-op.
         let _ = app.dispatch_command("TRIM");
-        let cmd = app.tabs[i].active_cmd.as_mut().expect("TRIM command active");
+        let cmd = app.tabs[i]
+            .active_cmd
+            .as_mut()
+            .expect("TRIM command active");
         assert_eq!(cmd.name(), "TRIM");
         let result = cmd.on_entity_pick(hatch_handle, glam::DVec3::new(2.0, 5.0, 0.0));
         assert!(matches!(result, CmdResult::ReplaceEntity(h, edited)
@@ -267,12 +270,7 @@ mod parametric_constraint_undo_tests {
         }
     }
 
-    fn assert_segment_unmoved(
-        app: &OpenCADStudio,
-        handle: Handle,
-        start: [f64; 2],
-        end: [f64; 2],
-    ) {
+    fn assert_segment_unmoved(app: &OpenCADStudio, handle: Handle, start: [f64; 2], end: [f64; 2]) {
         let (s, e) = line_segment(app, handle);
         assert!(
             (s[0] - start[0]).abs() < 1e-9
@@ -359,10 +357,7 @@ mod parametric_constraint_undo_tests {
         let reversed = add_line(&mut app, 0.0, 50.0, -100.0, 50.0);
         let _ = app.apply_cmd_result(CmdResult::AddParametricConstraint {
             kind: ConstraintKind::Parallel,
-            refs: vec![
-                ParametricRef::whole(datum),
-                ParametricRef::whole(reversed),
-            ],
+            refs: vec![ParametricRef::whole(datum), ParametricRef::whole(reversed)],
             driving_param: None,
             label: "Parallel constraint",
         });
@@ -468,7 +463,9 @@ mod parametric_constraint_undo_tests {
         assert_segment_unmoved(&app, line, [-100.0, 0.0], [100.0, 0.0]);
         let (center, radius) = circle_center_radius(&app, circle);
         assert!(
-            center[0].abs() < 1e-9 && (center[1] - 20.0).abs() < 1e-9 && (radius - 20.0).abs() < 1e-9,
+            center[0].abs() < 1e-9
+                && (center[1] - 20.0).abs() < 1e-9
+                && (radius - 20.0).abs() < 1e-9,
             "the circle should slide onto the line along the normal: {center:?} r {radius}"
         );
     }
@@ -1501,10 +1498,12 @@ mod dispatched_command_task_tests {
         let _ = app.automation_op(r#"{"op":"new"}"#);
         let i = app.active_tab;
 
-        let handle = app.tabs[i].scene.add_entity(codec::EntityType::Line(codec::entities::Line::from_points(
-            codec::types::Vector3::new(10.0, 20.0, 0.0),
-            codec::types::Vector3::new(30.0, 40.0, 0.0),
-        )));
+        let handle = app.tabs[i].scene.add_entity(codec::EntityType::Line(
+            codec::entities::Line::from_points(
+                codec::types::Vector3::new(10.0, 20.0, 0.0),
+                codec::types::Vector3::new(30.0, 40.0, 0.0),
+            ),
+        ));
 
         // Unselected entity - AutoLISP (command "_MOVE" ss "" "_NONE" pt "_NONE" '(0 0 0)) produces:
         assert!(app.tabs[i].scene.selected_entities().is_empty());
@@ -1514,10 +1513,26 @@ mod dispatched_command_task_tests {
 
         let moved = app.tabs[i].scene.document.get_entity(handle).unwrap();
         if let codec::EntityType::Line(l) = moved {
-            assert!((l.start.x - 0.0).abs() < 1e-4, "Expected start.x == 0, got {}", l.start.x);
-            assert!((l.start.y - 0.0).abs() < 1e-4, "Expected start.y == 0, got {}", l.start.y);
-            assert!((l.end.x - 20.0).abs() < 1e-4, "Expected end.x == 20, got {}", l.end.x);
-            assert!((l.end.y - 20.0).abs() < 1e-4, "Expected end.y == 20, got {}", l.end.y);
+            assert!(
+                (l.start.x - 0.0).abs() < 1e-4,
+                "Expected start.x == 0, got {}",
+                l.start.x
+            );
+            assert!(
+                (l.start.y - 0.0).abs() < 1e-4,
+                "Expected start.y == 0, got {}",
+                l.start.y
+            );
+            assert!(
+                (l.end.x - 20.0).abs() < 1e-4,
+                "Expected end.x == 20, got {}",
+                l.end.x
+            );
+            assert!(
+                (l.end.y - 20.0).abs() < 1e-4,
+                "Expected end.y == 20, got {}",
+                l.end.y
+            );
         } else {
             panic!("Expected line entity");
         }
@@ -1529,10 +1544,12 @@ mod dispatched_command_task_tests {
         let _ = app.automation_op(r#"{"op":"new"}"#);
         let i = app.active_tab;
 
-        let handle = app.tabs[i].scene.add_entity(codec::EntityType::Line(codec::entities::Line::from_points(
-            codec::types::Vector3::new(10.0, 20.0, 0.0),
-            codec::types::Vector3::new(30.0, 40.0, 0.0),
-        )));
+        let handle = app.tabs[i].scene.add_entity(codec::EntityType::Line(
+            codec::entities::Line::from_points(
+                codec::types::Vector3::new(10.0, 20.0, 0.0),
+                codec::types::Vector3::new(30.0, 40.0, 0.0),
+            ),
+        ));
 
         // User pre-selects the entity in the GUI
         app.tabs[i].scene.select_entity(handle, true);
@@ -1545,10 +1562,26 @@ mod dispatched_command_task_tests {
 
         let moved = app.tabs[i].scene.document.get_entity(handle).unwrap();
         if let codec::EntityType::Line(l) = moved {
-            assert!((l.start.x - 0.0).abs() < 1e-4, "Expected start.x == 0, got {}", l.start.x);
-            assert!((l.start.y - 0.0).abs() < 1e-4, "Expected start.y == 0, got {}", l.start.y);
-            assert!((l.end.x - 20.0).abs() < 1e-4, "Expected end.x == 20, got {}", l.end.x);
-            assert!((l.end.y - 20.0).abs() < 1e-4, "Expected end.y == 20, got {}", l.end.y);
+            assert!(
+                (l.start.x - 0.0).abs() < 1e-4,
+                "Expected start.x == 0, got {}",
+                l.start.x
+            );
+            assert!(
+                (l.start.y - 0.0).abs() < 1e-4,
+                "Expected start.y == 0, got {}",
+                l.start.y
+            );
+            assert!(
+                (l.end.x - 20.0).abs() < 1e-4,
+                "Expected end.x == 20, got {}",
+                l.end.x
+            );
+            assert!(
+                (l.end.y - 20.0).abs() < 1e-4,
+                "Expected end.y == 20, got {}",
+                l.end.y
+            );
         } else {
             panic!("Expected line entity");
         }
@@ -2006,18 +2039,17 @@ mod bedit_characterization_tests {
         let tab = app.active_tab;
 
         // Create line1 on layer "0" (unlocked)
-        let h_unlocked = app.tabs[tab]
-            .scene
-            .add_entity(codec::EntityType::Line(Line::from_points(
-                Vector3::ZERO,
-                Vector3::new(10.0, 0.0, 0.0),
-            )));
+        let h_unlocked =
+            app.tabs[tab]
+                .scene
+                .add_entity(codec::EntityType::Line(Line::from_points(
+                    Vector3::ZERO,
+                    Vector3::new(10.0, 0.0, 0.0),
+                )));
 
         // Create line2 on layer "LOCKED_LAYER" and lock it
-        let mut line2 = Line::from_points(
-            Vector3::new(0.0, 10.0, 0.0),
-            Vector3::new(10.0, 10.0, 0.0),
-        );
+        let mut line2 =
+            Line::from_points(Vector3::new(0.0, 10.0, 0.0), Vector3::new(10.0, 10.0, 0.0));
         line2.common.layer = "LOCKED_LAYER".to_string();
         let h_locked = app.tabs[tab]
             .scene
@@ -2342,11 +2374,7 @@ mod block_base_point_tests {
             .expect("the block record");
         let marker = record.block_entity_handle.value();
         let end = record.block_end_handle.value();
-        let body: Vec<_> = record
-            .entity_handles
-            .iter()
-            .map(|h| h.value())
-            .collect();
+        let body: Vec<_> = record.entity_handles.iter().map(|h| h.value()).collect();
         assert!(
             body.iter().all(|h| *h > marker),
             "body handles follow the BLOCK marker: {body:?}"
@@ -2357,7 +2385,10 @@ mod block_base_point_tests {
         );
         assert!(
             matches!(
-                app.tabs[i].scene.document.get_entity(codec::Handle::new(end)),
+                app.tabs[i]
+                    .scene
+                    .document
+                    .get_entity(codec::Handle::new(end)),
                 Some(EntityType::BlockEnd(_))
             ),
             "the record's end handle names an ENDBLK entity"
@@ -2459,10 +2490,14 @@ mod sweep_path_end_tests {
         let mut hexagon = LwPolyline::new();
         for k in 0..6 {
             let a = (60.0 * k as f64).to_radians();
-            hexagon.vertices.push(LwVertex::new(Vector2::new(5.0 * a.cos(), 5.0 * a.sin())));
+            hexagon
+                .vertices
+                .push(LwVertex::new(Vector2::new(5.0 * a.cos(), 5.0 * a.sin())));
         }
         hexagon.is_closed = true;
-        let profile = app.tabs[i].scene.add_entity(codec::EntityType::LwPolyline(hexagon));
+        let profile = app.tabs[i]
+            .scene
+            .add_entity(codec::EntityType::LwPolyline(hexagon));
         let mut path = LwPolyline::new();
         path.vertices.push(LwVertex::new(Vector2::new(20.0, 0.0)));
         path.vertices.push(LwVertex::with_bulge(
@@ -2471,7 +2506,9 @@ mod sweep_path_end_tests {
         ));
         path.vertices.push(LwVertex::new(Vector2::new(80.0, 20.0)));
         path.vertices.push(LwVertex::new(Vector2::new(80.0, 60.0)));
-        let path = app.tabs[i].scene.add_entity(codec::EntityType::LwPolyline(path));
+        let path = app.tabs[i]
+            .scene
+            .add_entity(codec::EntityType::LwPolyline(path));
         let options = crate::command::SweepOptions {
             path_pick: Some(glam::DVec3::new(80.0, 40.0, 0.0)),
             ..crate::command::SweepOptions::default()

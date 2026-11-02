@@ -351,9 +351,8 @@ impl OpenCADStudio {
 
     pub(super) fn open_bedit_dialog(&mut self, i: usize) {
         if self.block_editor_preferences.locked {
-            self.command_line.push_error(
-                crate::t!("The Block Editor is locked by BLOCKEDITLOCK.").as_ref(),
-            );
+            self.command_line
+                .push_error(crate::t!("The Block Editor is locked by BLOCKEDITLOCK.").as_ref());
             return;
         }
         if self.tabs[i].refedit_session.is_some() {
@@ -424,9 +423,8 @@ impl OpenCADStudio {
                 // `OK` is reachable with an empty field, and silence is not an
                 // answer: say what the field is short of.
                 let state = self.block_edit_picker.as_mut().unwrap();
-                state.error = Some(
-                    crate::t!("The name must be at least one character long.").into_owned(),
-                );
+                state.error =
+                    Some(crate::t!("The name must be at least one character long.").into_owned());
             }
             return Task::none();
         }

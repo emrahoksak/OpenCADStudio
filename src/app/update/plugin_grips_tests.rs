@@ -1,4 +1,4 @@
-﻿//! Plugin grip surface characterisation (API v11). Tests only; no
+//! Plugin grip surface characterisation (API v11). Tests only; no
 //! production code changed here.
 //!
 //! Paths covered (the commission's acceptance set):
@@ -229,7 +229,7 @@ fn install_sink(plugin: &str) -> SinkState {
                     descriptor: None,
                     descriptor_tolerance: None,
                 }
-            },
+            }
             CustomGripPhase::Settle => {
                 if *panic_on_settle.borrow() {
                     panic!("plugin settle handler is buggy");
@@ -1795,8 +1795,8 @@ fn descriptor_reanchor_solves_ramp_ends_by_bisection() {
         layer: String::new(),
     };
     // Record-model sanity: the declared end height (the unsigned re-read).
-    let (base, _) = crate::parametric::build_display_entities(&chain, 1e-3)
-        .expect("the base chain derives");
+    let (base, _) =
+        crate::parametric::build_display_entities(&chain, 1e-3).expect("the base chain derives");
     let _ = base;
 
     // The re-anchor: the same run (100.0), the end lifted to 11.0, the
@@ -1808,9 +1808,7 @@ fn descriptor_reanchor_solves_ramp_ends_by_bisection() {
         glam::DVec3::new(100.0, 11.0, 0.0),
     )
     .expect("the height target solves");
-    let ocs_plugin_api::host::Ramp::Sampled {
-        values: solved, ..
-    } = &edited.segments[0].def.ramp
+    let ocs_plugin_api::host::Ramp::Sampled { values: solved, .. } = &edited.segments[0].def.ramp
     else {
         panic!("the scale keeps the sampled arm");
     };
@@ -1958,10 +1956,7 @@ fn descriptor_begin_engages_and_moves_restage_in_place() {
         "PLUGIN_ALIGN_DISPLAY",
         vec![
             codec::objects::XRecordEntry::string(1, "peak_gradient"),
-            codec::objects::XRecordEntry::new(
-                140,
-                codec::objects::XRecordValue::Double(0.06),
-            ),
+            codec::objects::XRecordEntry::new(140, codec::objects::XRecordValue::Double(0.06)),
         ],
     )
     .expect("the design record seeds");
@@ -2019,9 +2014,8 @@ fn descriptor_begin_engages_and_moves_restage_in_place() {
                         final_point,
                     )
                     .expect("the plugin's own law re-derives the settled design");
-                    let (fresh, _) =
-                        crate::parametric::build_display_entities(&design, 1e-3)
-                            .expect("the settled design derives");
+                    let (fresh, _) = crate::parametric::build_display_entities(&design, 1e-3)
+                        .expect("the settled design derives");
                     let staged = handles2.borrow().clone();
                     assert_eq!(fresh.len(), staged.len(), "the restage is count-stable");
                     for (slot, fresh_entity) in staged.iter().zip(fresh.iter()) {
@@ -2100,7 +2094,9 @@ fn descriptor_begin_engages_and_moves_restage_in_place() {
     // (the stamp read goes through its own host session).
     for handle in &handles {
         let mut session = crate::app::plugin_host::HostSession::new(&mut app, i);
-        assert!(session.read_record(*handle, "PLUGIN_ALIGN_DISPLAY").is_some());
+        assert!(session
+            .read_record(*handle, "PLUGIN_ALIGN_DISPLAY")
+            .is_some());
     }
     for handle in &handles {
         assert!(app.tabs[i].scene.is_reference_only(*handle));
@@ -2134,7 +2130,9 @@ fn descriptor_begin_engages_and_moves_restage_in_place() {
             (spline.control_points[2].y - 11.0).abs() < 1e-9,
             "the re-stage re-applied the settled design"
         );
-        assert!(host.read_record(handles[0], "PLUGIN_ALIGN_DISPLAY").is_some());
+        assert!(host
+            .read_record(handles[0], "PLUGIN_ALIGN_DISPLAY")
+            .is_some());
     }
     // Two undos round-trip the original display set (the re-stage's step,
     // then the record row's step).
@@ -2211,9 +2209,7 @@ fn descriptor_refusals_keep_the_streaming_path() {
     {
         let events2 = Rc::clone(&events);
         let begin2 = Rc::new(RefCell::new(Some((
-                        ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(
-                            crest_profile_chain(),
-                        ),
+            ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(crest_profile_chain()),
             1e-3,
         ))));
         grip_points::install_in_process_sink(plugin, move |_host, event| {
@@ -2333,9 +2329,7 @@ fn descriptor_moves_refused_by_the_model_keep_the_last_good_design() {
     {
         let events2 = Rc::clone(&events);
         let begin2 = Rc::new(RefCell::new(Some((
-            ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(
-                crest_profile_chain(),
-            ),
+            ocs_plugin_api::host::PluginDisplayDescriptor::ParametricChain(crest_profile_chain()),
             1e-3,
         ))));
         grip_points::install_in_process_sink(plugin, move |_host, event| {

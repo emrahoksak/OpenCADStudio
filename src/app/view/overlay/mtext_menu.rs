@@ -82,11 +82,7 @@ fn mark_cell(mark: Mark) -> Element<'static, Message> {
 }
 
 /// A menu row: check/icon column, then the label.
-fn row_button(
-    mark: impl Into<Mark>,
-    name: String,
-    on_press: Message,
-) -> Element<'static, Message> {
+fn row_button(mark: impl Into<Mark>, name: String, on_press: Message) -> Element<'static, Message> {
     button(
         row![
             mark_cell(mark.into()),
@@ -234,9 +230,12 @@ pub(super) fn toolbar_menu(ed: &MTextEditorState, menu: EditorMenu) -> Element<'
     });
     let open = shown == Some(menu);
     let base = button(
-        row![text(title(menu)).size(11), crate::ui::icons::themed_arrow_down(9.0)]
-            .spacing(5)
-            .align_y(iced::Alignment::Center),
+        row![
+            text(title(menu)).size(11),
+            crate::ui::icons::themed_arrow_down(9.0)
+        ]
+        .spacing(5)
+        .align_y(iced::Alignment::Center),
     )
     .on_press(Message::MTextMenu(Some(menu)))
     .padding([4, 8])
@@ -606,20 +605,13 @@ fn fraction_panel(ed: &MTextEditorState) -> Element<'static, Message> {
 }
 
 /// A row that cannot act here, with the reason as its hint.
-fn inert(
-    mark: impl Into<Mark>,
-    name: String,
-    reason: String,
-) -> Element<'static, Message> {
+fn inert(mark: impl Into<Mark>, name: String, reason: String) -> Element<'static, Message> {
     iced::widget::tooltip(
         button(
-            row![
-                mark_cell(mark.into()),
-                text(name).size(11).width(Fill),
-            ]
-            .spacing(2)
-            .align_y(iced::Alignment::Center)
-            .height(Fill),
+            row![mark_cell(mark.into()), text(name).size(11).width(Fill),]
+                .spacing(2)
+                .align_y(iced::Alignment::Center)
+                .height(Fill),
         )
         .padding([0, 6])
         .width(Fill)

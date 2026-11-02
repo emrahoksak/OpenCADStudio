@@ -613,7 +613,10 @@ fn open_dynamic_value_list_swallows_escape_enter_and_the_arrows() {
             "{msg:?} must not reach the command line or the viewport"
         );
     }
-    assert!(app.tabs[app.active_tab].properties.open_block_picker.is_some());
+    assert!(app.tabs[app.active_tab]
+        .properties
+        .open_block_picker
+        .is_some());
     assert!(app
         .intercept_block_picker_key(&Message::PropBlockPickerToggle {
             key: block_parameter_key(),
@@ -624,7 +627,10 @@ fn open_dynamic_value_list_swallows_escape_enter_and_the_arrows() {
 
 #[test]
 fn escape_closes_the_dynamic_value_list_and_keeps_the_selection() {
-    for escape in [Message::CommandEscape, Message::ShortcutPressed("ESCAPE".into())] {
+    for escape in [
+        Message::CommandEscape,
+        Message::ShortcutPressed("ESCAPE".into()),
+    ] {
         let mut app = fixture();
         let handle = select_editor_line(&mut app);
         open_dynamic_value_list(&mut app);

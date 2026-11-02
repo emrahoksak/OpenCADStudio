@@ -627,9 +627,9 @@ impl OpenCADStudio {
         {
             return StepInput::SelectionComplete(handles);
         }
-        let (kept, dropped): (Vec<Handle>, Vec<Handle>) = handles.into_iter().partition(|handle| {
-            !self.tabs[i].scene.is_layer_locked(*handle)
-        });
+        let (kept, dropped): (Vec<Handle>, Vec<Handle>) = handles
+            .into_iter()
+            .partition(|handle| !self.tabs[i].scene.is_layer_locked(*handle));
         for handle in &dropped {
             self.tabs[i].scene.deselect_entity(*handle);
         }

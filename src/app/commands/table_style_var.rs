@@ -9,14 +9,26 @@ use iced::Task;
 const NAME: &str = "CTABLESTYLE";
 
 impl OpenCADStudio {
-    pub(super) fn dispatch_table_style_var(&mut self, cmd: &str, i: usize) -> Option<Task<Message>> {
+    pub(super) fn dispatch_table_style_var(
+        &mut self,
+        cmd: &str,
+        i: usize,
+    ) -> Option<Task<Message>> {
         let rest = cmd.strip_prefix("SETVAR ").map(str::trim).unwrap_or(cmd);
         let (name, value) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-        if !name.trim_start_matches(['_', '.']).eq_ignore_ascii_case(NAME) {
+        if !name
+            .trim_start_matches(['_', '.'])
+            .eq_ignore_ascii_case(NAME)
+        {
             return None;
         }
         let ask = |app: &mut Self| {
-            let current = app.tabs[i].scene.document.header.current_table_style_name.clone();
+            let current = app.tabs[i]
+                .scene
+                .document
+                .header
+                .current_table_style_name
+                .clone();
             app.command_line.push_output(&crate::t!(
                 "Enter new value for CTABLESTYLE <\"%{name}\">:",
                 name = current

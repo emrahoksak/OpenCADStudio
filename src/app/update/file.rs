@@ -1,13 +1,11 @@
 //! `file` arms and helpers, split out of the original `update.rs` (#mechanical decomposition).
 
 #![allow(unused_imports)]
-use crate::io::plot_style::PlotStyleTableExt as _;
 use super::util::*;
 use super::{format_size, VIEWCUBE_HIT_SIZE};
-use crate::app::helpers::{
-    parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind,
-};
+use crate::app::helpers::{parse_coord, ucs_rotate_vec, ucs_to_wcs, ucs_z_axis, CoordKind};
 use crate::app::{Message, OpenCADStudio, POLY_START_DELAY_MS};
+use crate::io::plot_style::PlotStyleTableExt as _;
 use crate::modules::ModuleEvent;
 use crate::scene::model::object::GripApply;
 use crate::scene::pick::grip::{find_hit_grip, find_hit_grip_paper, find_hit_grip_rte, GripEdit};
@@ -683,10 +681,12 @@ fn plot_entity_layers(
     hatches: &[crate::scene::model::hatch_model::HatchModel],
     wipeouts: &[crate::scene::model::hatch_model::HatchModel],
 ) -> std::collections::HashMap<codec::Handle, String> {
-    let names = wires
-        .iter()
-        .map(|wire| wire.name.as_str())
-        .chain(hatches.iter().chain(wipeouts).map(|hatch| hatch.name.as_str()));
+    let names = wires.iter().map(|wire| wire.name.as_str()).chain(
+        hatches
+            .iter()
+            .chain(wipeouts)
+            .map(|hatch| hatch.name.as_str()),
+    );
     let mut layers = std::collections::HashMap::new();
     for name in names {
         let Some(handle) = crate::scene::Scene::handle_from_wire_name(name) else {
@@ -862,8 +862,7 @@ impl OpenCADStudio {
             #[cfg(not(target_arch = "wasm32"))]
             plot_styles_folder: crate::io::plot_style::plot_styles_folder()
                 .map(|p| p.display().to_string()),
-            support_folder: crate::io::font_repo::support_folder()
-                .map(|p| p.display().to_string()),
+            support_folder: crate::io::font_repo::support_folder().map(|p| p.display().to_string()),
             #[cfg(target_arch = "wasm32")]
             fonts_folder: None,
             #[cfg(target_arch = "wasm32")]
@@ -985,7 +984,10 @@ impl OpenCADStudio {
         self.cursor_size = s.cursor_size.clamp(1, 100);
         self.pick_box = s.pick_box.clamp(0, 50);
         self.snapper.osnap_radius_px = if s.aperture.is_finite() {
-            s.aperture.clamp(crate::snap::MIN_OSNAP_RADIUS_PX, crate::snap::MAX_OSNAP_RADIUS_PX)
+            s.aperture.clamp(
+                crate::snap::MIN_OSNAP_RADIUS_PX,
+                crate::snap::MAX_OSNAP_RADIUS_PX,
+            )
         } else {
             crate::snap::DEFAULT_OSNAP_RADIUS_PX
         };
@@ -1587,7 +1589,14 @@ impl OpenCADStudio {
             .entry("SHIFT+TAB".to_string())
             .or_insert_with(|| "DYNTABPREV".to_string());
         self.shortcut_bindings
-            .entry(if cfg!(target_os = "macos") { "CMD+R" } else { "CTRL+R" }.to_string())
+            .entry(
+                if cfg!(target_os = "macos") {
+                    "CMD+R"
+                } else {
+                    "CTRL+R"
+                }
+                .to_string(),
+            )
             .or_insert_with(|| "NEXTVIEWPORT".to_string());
         for (key, action) in crate::app::shortcuts::PLATFORM_BINDINGS {
             self.shortcut_bindings
@@ -2137,7 +2146,11 @@ impl OpenCADStudio {
             .push_output(crate::tf!("Opened \"{name}\" — {entity_count} entities").as_ref());
         // What a converter could not carry over is a warning: the drawing
         // opened and is usable.
-        for diagnostic in caches.read_stats.iter().flat_map(|stats| &stats.diagnostics) {
+        for diagnostic in caches
+            .read_stats
+            .iter()
+            .flat_map(|stats| &stats.diagnostics)
+        {
             if diagnostic.code == ocs_save::CONVERSION_LOSS {
                 self.command_line.push_warning(&diagnostic.message);
             }
@@ -3087,9 +3100,7 @@ impl OpenCADStudio {
             crate::io::prepare_document_for_save(self.tabs[i].scene.document_for_save(), version);
         let allow_loss = std::mem::take(&mut self.conversion_loss_allowed);
         Task::perform(
-            async move {
-                crate::io::serialize_prepared_document(&prepared, &ext, allow_loss).await
-            },
+            async move { crate::io::serialize_prepared_document(&prepared, &ext, allow_loss).await },
             move |result| Message::WebSaveSerialized {
                 tab_id,
                 filename,
@@ -4263,17 +4274,16 @@ impl OpenCADStudio {
                 .as_ref()
                 .and_then(|p| p.parent().map(|d| d.to_path_buf()));
             let default_name = filename;
-            let (filter_label, filter_ext): (&str, &str) = if let Some(converter) =
-                ocs_save::external_format(ext)
-            {
-                (converter.name(), ext)
-            } else if ext.eq_ignore_ascii_case("dxf") {
-                ("DXF Files", "dxf")
-            } else if ext.eq_ignore_ascii_case("dwt") {
-                ("Drawing Template (*.dwt)", "dwt")
-            } else {
-                ("DWG Files", "dwg")
-            };
+            let (filter_label, filter_ext): (&str, &str) =
+                if let Some(converter) = ocs_save::external_format(ext) {
+                    (converter.name(), ext)
+                } else if ext.eq_ignore_ascii_case("dxf") {
+                    ("DXF Files", "dxf")
+                } else if ext.eq_ignore_ascii_case("dwt") {
+                    ("Drawing Template (*.dwt)", "dwt")
+                } else {
+                    ("DWG Files", "dwg")
+                };
             let close = self.close_save_dialog_window();
             let pick = Task::perform(
                 async move {
@@ -5353,8 +5363,7 @@ impl OpenCADStudio {
             ps.flags.use_standard_scale = false;
             ps.scale_numerator = 1.0;
             ps.scale_denominator = page_unit_mm;
-            ps.standard_scale_factor =
-                stored_scale_factor(1.0 / page_unit_mm, ps.paper_units);
+            ps.standard_scale_factor = stored_scale_factor(1.0 / page_unit_mm, ps.paper_units);
         } else if d.fit_to_paper {
             ps.set_scale_to_fit();
             // The commercial application marks fitted plots with the
@@ -7822,15 +7831,13 @@ impl OpenCADStudio {
         }
 
         let Ok(screening) = self.ps_screening_buf.trim().parse::<u8>() else {
-            self.command_line.push_error(
-                crate::t!("Screening must be a whole number from 0 to 100.").as_ref(),
-            );
+            self.command_line
+                .push_error(crate::t!("Screening must be a whole number from 0 to 100.").as_ref());
             return Task::none();
         };
         if screening > 100 {
-            self.command_line.push_error(
-                crate::t!("Screening must be a whole number from 0 to 100.").as_ref(),
-            );
+            self.command_line
+                .push_error(crate::t!("Screening must be a whole number from 0 to 100.").as_ref());
             return Task::none();
         }
 
@@ -7933,7 +7940,9 @@ mod plot_paper_tests {
             if k == 2 {
                 crate::entities::hatch::set_background_color(&mut hatch, &Color::Index(1));
             }
-            app.tabs[i].scene.add_entity(codec::EntityType::Hatch(Box::new(hatch)));
+            app.tabs[i]
+                .scene
+                .add_entity(codec::EntityType::Hatch(Box::new(hatch)));
         }
         let page = app.layout_plot_page();
         let colors: Vec<_> = page.content.hatches.iter().map(|h| h.color).collect();
@@ -7972,7 +7981,10 @@ mod plot_paper_tests {
             let page = app.layout_plot_page();
             let named = |handle: codec::Handle| {
                 let name = handle.value().to_string();
-                page.content.wires.iter().filter(move |wire| wire.name == name)
+                page.content
+                    .wires
+                    .iter()
+                    .filter(move |wire| wire.name == name)
             };
             assert!(
                 named(solid).any(|wire| wire.points.iter().any(|p| p[0].is_finite())),

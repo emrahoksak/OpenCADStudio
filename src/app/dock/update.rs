@@ -504,6 +504,12 @@ impl OpenCADStudio {
         open: bool,
     ) -> iced::Task<Message> {
         use crate::ui::dock::{DockDrag, PanelId};
+        #[cfg(not(target_arch = "wasm32"))]
+        if id == PanelId::MetrajQuantityGroups {
+            self.metraj.show_quantity_groups = false;
+            self.dock_open_at_default(PanelId::MetrajItems);
+            return self.dock_set_open(PanelId::MetrajItems, open);
+        }
         let mut task = iced::Task::none();
         if open
             && id == PanelId::AuthoringPalettes
@@ -557,6 +563,18 @@ impl OpenCADStudio {
                         }
                     }
                     PanelId::QuickCalc => self.quick_calc.show = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajTree => self.metraj.show_tree = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajItems => self.metraj.show_items = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajQuantityGroups => self.metraj.show_quantity_groups = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajAssignments => self.metraj.show_assignments = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajSummary => self.metraj.show_summary = true,
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PanelId::MetrajRebar => self.metraj.rebar.show = true,
                     PanelId::Plugin(num) => {
                         if let Some(panel_id) = self.plugin_panel_by_num.get(&num) {
                             if let Some(panel) = self.plugin_panels.get_mut(panel_id) {
@@ -603,6 +621,18 @@ impl OpenCADStudio {
             }
             PanelId::Laywalk => self.close_layer_walk(false),
             PanelId::QuickCalc => self.quick_calc.show = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajTree => self.metraj.show_tree = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajItems => self.metraj.show_items = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajQuantityGroups => self.metraj.show_quantity_groups = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajAssignments => self.metraj.show_assignments = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajSummary => self.metraj.show_summary = false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajRebar => self.metraj.rebar.show = false,
             PanelId::GraphicAttributes => {
                 self.show_graphic_attributes = false;
                 self.ribbon.set_graphic_attributes(false);
@@ -665,12 +695,25 @@ impl OpenCADStudio {
         }
     }
 
-    /// Whether `id` is currently rendered (not closed, not on the start screen /
-    /// clean-screen viewport). Mirrors the visibility filter the edge column
+    /// Whether `id` is currently rendered. Metraj panels may show on Start;
+    /// drawing panels require an open drawing. Mirrors the edge column
     /// renderer applies before building each side's stack.
     pub(crate) fn dock_panel_visible(&self, id: crate::ui::dock::PanelId) -> bool {
         use crate::ui::dock::PanelId;
         if self.tabs[self.active_tab].is_start {
+            #[cfg(not(target_arch = "wasm32"))]
+            if !matches!(
+                id,
+                PanelId::MetrajTree
+                    | PanelId::MetrajItems
+                    | PanelId::MetrajQuantityGroups
+                    | PanelId::MetrajAssignments
+                    | PanelId::MetrajSummary
+                    | PanelId::MetrajRebar
+            ) {
+                return false;
+            }
+            #[cfg(target_arch = "wasm32")]
             return false;
         }
         if self.clean_screen && !(id == PanelId::Properties && self.clean_screen_properties) {
@@ -697,14 +740,28 @@ impl OpenCADStudio {
             // comes back when the pick ends or is cancelled.
             PanelId::Laywalk => {
                 let tab = &self.tabs[self.active_tab];
-                tab.layer_walk.is_some()
-                    && !(tab.layer_walk_picking && tab.active_cmd.is_some())
+                tab.layer_walk.is_some() && !(tab.layer_walk_picking && tab.active_cmd.is_some())
             }
             PanelId::QuickCalc => self.quick_calc.show,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajTree => self.metraj.show_tree,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajItems => self.metraj.show_items,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajQuantityGroups => false,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajAssignments => self.metraj.show_assignments,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajSummary => self.metraj.show_summary,
+            #[cfg(not(target_arch = "wasm32"))]
+            PanelId::MetrajRebar => self.metraj.rebar.show,
             PanelId::GraphicAttributes => self.show_graphic_attributes,
             PanelId::Plugin(num) => {
                 if let Some(panel_id) = self.plugin_panel_by_num.get(&num) {
-                    self.plugin_panels.get(panel_id).map(|p| p.visible).unwrap_or(false)
+                    self.plugin_panels
+                        .get(panel_id)
+                        .map(|p| p.visible)
+                        .unwrap_or(false)
                 } else {
                     false
                 }

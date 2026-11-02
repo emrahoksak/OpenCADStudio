@@ -210,14 +210,19 @@ impl OpenCADStudio {
                 }
             }
         }
-        let hatch_detached = self.tabs[i].active_cmd.as_ref().is_some_and(|cmd| cmd.name() == "TRIM")
+        let hatch_detached = self.tabs[i]
+            .active_cmd
+            .as_ref()
+            .is_some_and(|cmd| cmd.name() == "TRIM")
             && matches!(
                 self.tabs[i].scene.document.get_entity(handle),
                 Some(codec::EntityType::Hatch(hatch)) if hatch.is_associative
             )
-            && new_entities.iter().any(|entity| matches!(
-                entity, codec::EntityType::Hatch(hatch) if !hatch.is_associative
-            ));
+            && new_entities.iter().any(|entity| {
+                matches!(
+                    entity, codec::EntityType::Hatch(hatch) if !hatch.is_associative
+                )
+            });
         let label = self.history_label_from_active_cmd(i, "TRIM");
         self.push_undo_snapshot(i, label);
         // Apply one-to-one edits in place. Erase/add with the same handle
@@ -601,7 +606,10 @@ pub(crate) fn mleader_handles(m: &mut codec::entities::MultiLeader) -> Vec<&mut 
     handles
 }
 
-pub(crate) fn remap_mleader(entity: &mut codec::EntityType, map: &std::collections::HashMap<Handle, Handle>) {
+pub(crate) fn remap_mleader(
+    entity: &mut codec::EntityType,
+    map: &std::collections::HashMap<Handle, Handle>,
+) {
     if let codec::EntityType::MultiLeader(m) = entity {
         for h in mleader_handles(m) {
             *h = h
@@ -938,15 +946,20 @@ pub(crate) fn eed_app_map(
 /// Re-point a copied entity's verbatim EED at this drawing's APPIDs. A block
 /// whose application the map does not know names no APPID here, and a DWG
 /// carrying one is rejected outright by the reference program, so it goes.
-pub(crate) fn remap_eed_apps(entity: &mut codec::EntityType, apps: &rustc_hash::FxHashMap<u64, u64>) {
+pub(crate) fn remap_eed_apps(
+    entity: &mut codec::EntityType,
+    apps: &rustc_hash::FxHashMap<u64, u64>,
+) {
     let remap = |xdata: &mut codec::xdata::ExtendedData| {
-        xdata.raw_dwg_eed.retain_mut(|(app, _)| match apps.get(app) {
-            Some(&target) => {
-                *app = target;
-                true
-            }
-            None => false,
-        });
+        xdata
+            .raw_dwg_eed
+            .retain_mut(|(app, _)| match apps.get(app) {
+                Some(&target) => {
+                    *app = target;
+                    true
+                }
+                None => false,
+            });
     };
     remap(&mut entity.common_mut().extended_data);
     if let codec::EntityType::Insert(insert) = entity {
@@ -2668,7 +2681,9 @@ mod paste_entities_kernel_tests {
     fn remaps_leader_annotation_link_to_pasted_handles() {
         let mut seed = codec::Document::new();
         let note = seed
-            .add_entity(codec::EntityType::MText(Box::new(codec::entities::MText::new())))
+            .add_entity(codec::EntityType::MText(Box::new(
+                codec::entities::MText::new(),
+            )))
             .unwrap();
         let mut leader = codec::entities::Leader::default();
         leader.annotation_handle = note;

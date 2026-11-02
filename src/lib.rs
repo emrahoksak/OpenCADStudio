@@ -30,6 +30,8 @@ pub mod mcp_intent;
 pub mod mcp_ops;
 pub mod modules;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod metraj;
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod network;
 pub mod par;
 #[cfg(not(target_arch = "wasm32"))]

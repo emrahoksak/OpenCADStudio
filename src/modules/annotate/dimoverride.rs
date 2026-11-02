@@ -108,10 +108,10 @@ impl CadCommand for DimOverrideCommand {
                     .into_owned()
             }
             None => t!("DIMOVERRIDE  Enter dimension variable name to override:").into_owned(),
-            Some((_, _, current)) => crate::tf!(
-                "DIMOVERRIDE  Enter new value for dimension variable <{current}>:"
-            )
-            .into_owned(),
+            Some((_, _, current)) => {
+                crate::tf!("DIMOVERRIDE  Enter new value for dimension variable <{current}>:")
+                    .into_owned()
+            }
         }
     }
 
@@ -170,9 +170,9 @@ impl CadCommand for DimOverrideCommand {
                 self.pending = Some((upper, kind, current));
                 CmdResult::NeedPoint
             }
-            None => CmdResult::ReportError(
-                crate::tf!("Variable \"{upper}\" not found.").into_owned(),
-            ),
+            None => {
+                CmdResult::ReportError(crate::tf!("Variable \"{upper}\" not found.").into_owned())
+            }
         })
     }
 
@@ -215,4 +215,6 @@ pub fn parse_spec(spec: &str) -> Result<Vec<(i16, codec::xdata::XDataValue)>, St
         .collect()
 }
 
-inventory::submit!(crate::command::CommandRegistration { names: &["DIMOVERRIDE"] });
+inventory::submit!(crate::command::CommandRegistration {
+    names: &["DIMOVERRIDE"]
+});

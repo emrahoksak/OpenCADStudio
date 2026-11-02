@@ -141,7 +141,11 @@ fn block_flip_grip_outside_the_editor_lists_states_and_applies_the_choice() {
         let EntityType::Insert(ins) = doc.get_entity(reference).unwrap() else {
             panic!()
         };
-        let member = doc.block_records.get(&ins.block_name).unwrap().entity_handles[0];
+        let member = doc
+            .block_records
+            .get(&ins.block_name)
+            .unwrap()
+            .entity_handles[0];
         let EntityType::Line(line) = doc.get_entity(member).unwrap() else {
             panic!()
         };

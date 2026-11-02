@@ -42,5 +42,19 @@ __pycache__/
 # Single-instance lock files the app writes next to an open drawing
 *.ocs.lock
 
+# Local metraj database used when the user config directory is read-only
+metraj-data/
+
 # macOS Finder metadata
 .DS_Store
+
+# Local metraj runtime data and abandoned plugin experiment
+/plugins/opencad-metraj/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+.env
+.env.local

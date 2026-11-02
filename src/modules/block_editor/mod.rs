@@ -6,13 +6,13 @@ use crate::modules::parametric::ParametricModule;
 use crate::modules::{CadModule, IconKind, ModuleEvent, RibbonGroup, RibbonItem, ToolDef};
 
 pub mod action;
-pub(crate) mod alignment;
 pub(crate) mod action_bar;
 pub mod action_set;
-pub(crate) mod grip_set;
-pub(crate) mod construction;
+pub(crate) mod alignment;
 pub(crate) mod associate;
+pub(crate) mod construction;
 pub mod distance_parameter;
+pub(crate) mod grip_set;
 pub mod lookup_action;
 pub mod orientation_parameter;
 pub mod parameter_set;
@@ -143,17 +143,51 @@ impl CadModule for BlockEditorModule {
                     "Editor Settings",
                     include_bytes!("../../../assets/icons/tool_palettes.svg"),
                 ));
-                manage.tools.push(command("BGRIPSET", "Parameter Grips", include_bytes!("../../../assets/icons/ui/list.svg")));
-                manage.tools.push(command("BCONSTATUSMODE TOGGLE", "Constraint Status", include_bytes!("../../../assets/icons/constrain/fixed.svg")));
+                manage.tools.push(command(
+                    "BGRIPSET",
+                    "Parameter Grips",
+                    include_bytes!("../../../assets/icons/ui/list.svg"),
+                ));
+                manage.tools.push(command(
+                    "BCONSTATUSMODE TOGGLE",
+                    "Constraint Status",
+                    include_bytes!("../../../assets/icons/constrain/fixed.svg"),
+                ));
                 manage.tools.push(RibbonItem::LargeDropdown {
-                    id: "BLOCK_CONSTRUCTION", label: "Construction Geometry",
+                    id: "BLOCK_CONSTRUCTION",
+                    label: "Construction Geometry",
                     icon: IconKind::Svg(include_bytes!("../../../assets/icons/constrain/show.svg")),
                     items: vec![
-                        ("BCONSTRUCTION CONVERT", "Convert", IconKind::Svg(include_bytes!("../../../assets/icons/constrain/show.svg"))),
-                        ("BCONSTRUCTION REVERT", "Revert", IconKind::Svg(include_bytes!("../../../assets/icons/constrain/show.svg"))),
-                        ("BCONSTRUCTION SHOW", "Show All", IconKind::Svg(include_bytes!("../../../assets/icons/constrain/show_all.svg"))),
-                        ("BCONSTRUCTION HIDE", "Hide All", IconKind::Svg(include_bytes!("../../../assets/icons/constrain/hide_all.svg"))),
-                    ], default: "BCONSTRUCTION CONVERT",
+                        (
+                            "BCONSTRUCTION CONVERT",
+                            "Convert",
+                            IconKind::Svg(include_bytes!(
+                                "../../../assets/icons/constrain/show.svg"
+                            )),
+                        ),
+                        (
+                            "BCONSTRUCTION REVERT",
+                            "Revert",
+                            IconKind::Svg(include_bytes!(
+                                "../../../assets/icons/constrain/show.svg"
+                            )),
+                        ),
+                        (
+                            "BCONSTRUCTION SHOW",
+                            "Show All",
+                            IconKind::Svg(include_bytes!(
+                                "../../../assets/icons/constrain/show_all.svg"
+                            )),
+                        ),
+                        (
+                            "BCONSTRUCTION HIDE",
+                            "Hide All",
+                            IconKind::Svg(include_bytes!(
+                                "../../../assets/icons/constrain/hide_all.svg"
+                            )),
+                        ),
+                    ],
+                    default: "BCONSTRUCTION CONVERT",
                 });
                 manage.tools.push(command(
                     "BCYCLEORDER",

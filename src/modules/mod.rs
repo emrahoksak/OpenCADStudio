@@ -30,6 +30,8 @@ pub mod draw;
 pub mod insert;
 pub mod layout;
 pub mod manage;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod metraj;
 pub mod model;
 pub mod parametric;
 pub mod view;
