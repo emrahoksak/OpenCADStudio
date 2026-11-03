@@ -2173,7 +2173,7 @@ pub struct SaveOutcome {
     refreshed_preview: Option<Option<codec::Preview>>,
     result: Result<(), crate::io::SaveFailure>,
 }
-/// Which Options colour the interface colour picker is editing.
+/// Which interface colour the colour picker is editing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UiColor {
     ModelBackground,
@@ -2184,6 +2184,8 @@ pub enum UiColor {
     Crosshair,
     SnapMarker,
     CommandText,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajRoomFill,
 }
 
 /// Where a colour chosen in the standalone palette window should be applied.
@@ -2907,6 +2909,8 @@ pub enum ModalKind {
     LayerDeleteWarning,
     #[cfg(not(target_arch = "wasm32"))]
     MetrajDeleteWarning,
+    #[cfg(not(target_arch = "wasm32"))]
+    MetrajProjectDeleteWarning,
     Aliases,
     NamedParameters,
     BlockEditorSettings,
@@ -6217,6 +6221,8 @@ impl OpenCADStudio {
         // options survive across sessions (issue #68). `last_saved_config` is
         // seeded below so the first change — not the boot — triggers a write.
         app.apply_config(config);
+        #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+        app.restore_metraj_session();
         // Load command aliases from ocad.pgp (writes the shipped default file
         // on first launch). The hide-set keeps aliases out of autocomplete while
         // their target command still shows.

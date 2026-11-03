@@ -11,6 +11,8 @@ mod panels;
 mod rebar;
 mod rebar_marking;
 mod summary_panel;
+mod session;
+mod fill;
 
 pub(super) static METRAJ_WINDOW_ID: std::sync::Mutex<Option<iced::window::Id>> =
     std::sync::Mutex::new(None);
@@ -98,6 +100,12 @@ pub(crate) enum MetrajMsg {
     UpdateAssignment,
     RemoveAssignment,
     ConfirmDelete,
+    RequestDeleteProject,
+    ConfirmDeleteProject,
+    RoomFill(bool),
+    ToggleRoomFillSettings,
+    RoomFillColor(codec::types::Color),
+    RoomFillTransparency(u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -200,6 +208,12 @@ pub(crate) struct MetrajUi {
     last_sync: Option<(u64, u64, String)>,
     drawing_paths: std::collections::HashMap<u64, String>,
     pub(super) pending_delete: Option<deletion::PendingRoomDelete>,
+    pub(super) pending_project_delete: Option<deletion::PendingProjectDelete>,
+    room_fill_enabled: bool,
+    room_fill_color: [u8; 3],
+    room_fill_transparency: u8,
+    room_fill_settings_open: bool,
+    room_fill_cache: std::cell::RefCell<Option<fill::RoomFillCache>>,
 }
 
 impl Default for MetrajUi {
@@ -270,6 +284,12 @@ impl Default for MetrajUi {
             last_sync: None,
             drawing_paths: std::collections::HashMap::new(),
             pending_delete: None,
+            pending_project_delete: None,
+            room_fill_enabled: true,
+            room_fill_color: [64, 128, 255],
+            room_fill_transparency: 88,
+            room_fill_settings_open: false,
+            room_fill_cache: Default::default(),
         }
     }
 }
@@ -461,17 +481,25 @@ impl OpenCADStudio {
         }
     }
     pub(crate) fn dispatch_metraj(&mut self, command: &str) -> Option<Task<Message>> {
+        if self.metraj.project.is_none()
+            && matches!(
+                command,
+                "METRAJ" | "DEMIR" | "DM1" | "DM2" | "DMY" | "DMD" | "DMA"
+            )
+        {
+            self.restore_metraj_session();
+        }
         if let Some(task) = self.dispatch_rebar(command) {
             return Some(task);
         }
         match command {
             "METRAJ" => {
                 self.tabs[self.active_tab].last_cmd = Some("METRAJ".into());
-                if let Ok(path) = shared_metraj_path() {
-                    if path.exists() {
-                        self.metraj.project_entries =
-                            Project::list_shared(&path).unwrap_or_default();
-                    }
+                match shared_metraj_path().and_then(|path| {
+                    Project::list_shared(path).map_err(|error| error.to_string())
+                }) {
+                    Ok(entries) => self.metraj.project_entries = entries,
+                    Err(error) => self.metraj.status = format!("Projeler okunamadı: {error}"),
                 }
                 let left = crate::app::config::DockSide::Left;
                 let right = crate::app::config::DockSide::Right;
@@ -851,6 +879,9 @@ impl OpenCADStudio {
         let Some(tab) = self.tabs.get(self.active_tab) else {
             return;
         };
+        if tab.is_start {
+            return;
+        }
         let drawing_path = drawing_key(tab.current_path.as_deref(), tab.id);
         let key = (tab.id, tab.scene.geometry_epoch, drawing_path.clone());
         if self.metraj.last_sync.as_ref() == Some(&key) {
@@ -912,6 +943,12 @@ impl OpenCADStudio {
         }
         if let ConfirmDelete = msg {
             return self.confirm_metraj_delete();
+        }
+        if let RequestDeleteProject = msg {
+            return self.request_metraj_project_delete();
+        }
+        if let ConfirmDeleteProject = msg {
+            return self.confirm_metraj_project_delete();
         }
         if let OpenSummary = msg {
             self.dock_open_at_default(PanelId::MetrajSummary);
@@ -1016,7 +1053,28 @@ impl OpenCADStudio {
                 ApplyAssignments | SelectRoomSection(..) | SelectRoomAssignment(..) => {
                     unreachable!()
                 }
-                OpenSummary | ExportSummary | ConfirmDelete | Rebar(_) => unreachable!(),
+                OpenSummary | ExportSummary | ConfirmDelete | Rebar(_)
+                | RequestDeleteProject | ConfirmDeleteProject => unreachable!(),
+                RoomFill(enabled) => {
+                    let project = state.project.as_ref().ok_or("Önce proje seçin.")?;
+                    project.set_room_fill_enabled(enabled).map_err(|error| error.to_string())?;
+                    state.room_fill_enabled = enabled;
+                }
+                ToggleRoomFillSettings => state.room_fill_settings_open = !state.room_fill_settings_open,
+                RoomFillColor(color) => {
+                    let (r, g, b) = crate::ui::color_select::math::color_rgb(color)
+                        .ok_or("Dolgu için geçerli bir renk seçin.")?;
+                    let project = state.project.as_ref().ok_or("Önce proje seçin.")?;
+                    project.set_room_fill_style([r, g, b], state.room_fill_transparency)
+                        .map_err(|error| error.to_string())?;
+                    state.room_fill_color = [r, g, b];
+                }
+                RoomFillTransparency(value) => {
+                    let project = state.project.as_ref().ok_or("Önce proje seçin.")?;
+                    project.set_room_fill_style(state.room_fill_color, value)
+                        .map_err(|error| error.to_string())?;
+                    state.room_fill_transparency = value;
+                }
                 SummaryFilter(value) => state.summary_filter = value,
                 ToggleTreeForm => state.tree_form_open = !state.tree_form_open,
                 CatalogGroups(value) => state.catalog_groups = value,
@@ -1479,6 +1537,17 @@ impl OpenCADStudio {
         state.status = result.err().unwrap_or_default();
         if success && changed_project {
             if let Some(project) = &state.project {
+                match project.room_fill_enabled() {
+                    Ok(enabled) => state.room_fill_enabled = enabled,
+                    Err(error) => state.status = error.to_string(),
+                }
+                match project.room_fill_style() {
+                    Ok((color, transparency)) => {
+                        state.room_fill_color = color;
+                        state.room_fill_transparency = transparency;
+                    }
+                    Err(error) => state.status = error.to_string(),
+                }
                 if let Err(error) = state.rebar.load(project) {
                     state.status = error;
                 }
@@ -1495,7 +1564,16 @@ impl OpenCADStudio {
 
 fn drawing_key(path: Option<&std::path::Path>, tab_id: u64) -> String {
     path.map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|| format!("ocs-unsaved-tab:{tab_id}"))
+        .unwrap_or_else(|| {
+            static SESSION: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
+            let session = SESSION.get_or_init(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            });
+            format!("ocs-unsaved-tab:{session}:{}:{tab_id}", std::process::id())
+        })
 }
 
 fn metraj_rooms_for_handles(
@@ -1628,28 +1706,6 @@ fn send(msg: MetrajMsg) -> Message {
 fn shared_metraj_path() -> Result<PathBuf, String> {
     let dir = crate::config::config_dir().ok_or("Ayar dizini bulunamadı.")?;
     let primary = dir.join("metraj.sqlite");
-    if cfg!(debug_assertions) {
-        let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("metraj-data")
-            .join("metraj.sqlite");
-        if fallback.exists() {
-            return Ok(fallback);
-        }
-        if std::fs::create_dir_all(&dir).is_ok()
-            && std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .open(&primary)
-                .is_ok()
-        {
-            return Ok(primary);
-        }
-        std::fs::create_dir_all(fallback.parent().unwrap()).map_err(|e| e.to_string())?;
-        if primary.exists() {
-            std::fs::copy(&primary, &fallback).map_err(|e| e.to_string())?;
-        }
-        return Ok(fallback);
-    }
     std::fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
     Ok(primary)
 }
@@ -2100,6 +2156,121 @@ mod tests {
         app.tabs[app.active_tab]
             .scene
             .add_entity(codec::EntityType::LwPolyline(polyline))
+    }
+
+    #[test]
+    fn project_delete_requires_confirmation_and_preserves_drawing_entities() {
+        let mut app = metraj_app();
+        let boundary = rectangle(&mut app, 0.);
+        app.tabs[app.active_tab].scene.select_entity(boundary, true);
+        let _ = app.dispatch_command("NM");
+        let count = app.tabs[app.active_tab].scene.document.entities().count();
+        let _ = app.on_metraj(MetrajMsg::ConfirmDeleteProject);
+        assert!(app.metraj.project.is_some());
+        let _ = app.on_metraj(MetrajMsg::RequestDeleteProject);
+        assert_eq!(app.active_modal, Some(crate::app::ModalKind::MetrajProjectDeleteWarning));
+        assert!(app.metraj_project_delete_description().contains("Metraj commands"));
+        let _ = app.update(Message::CloseModal);
+        assert!(app.metraj.pending_project_delete.is_none());
+        assert!(app.metraj.project.is_some());
+        let _ = app.on_metraj(MetrajMsg::RequestDeleteProject);
+        let _ = app.on_metraj(MetrajMsg::ConfirmDeleteProject);
+        assert!(app.metraj.project.is_none());
+        assert_eq!(app.tabs[app.active_tab].scene.document.entities().count(), count);
+        assert!(app.tabs[app.active_tab].scene.document.get_entity(boundary).is_some());
+    }
+
+    #[test]
+    fn room_fill_covers_all_rooms_and_toggle_never_changes_cad_geometry() {
+        let mut app = metraj_app();
+        let first = rectangle(&mut app, 0.);
+        let second = rectangle(&mut app, 10.);
+        for boundary in [first, second] {
+            app.tabs[app.active_tab].scene.select_entity(boundary, true);
+            let _ = app.dispatch_command("NM");
+        }
+        let i = app.active_tab;
+        let count = app.tabs[i].scene.document.entities().count();
+        let epoch = app.tabs[i].scene.geometry_epoch;
+        let polygons = app.metraj.room_fill_polygons(&app.tabs[i]);
+        assert_eq!(polygons.len(), 2);
+        assert!(std::sync::Arc::ptr_eq(&polygons, &app.metraj.room_fill_polygons(&app.tabs[i])));
+        let _ = app.on_metraj(MetrajMsg::RoomFill(false));
+        assert!(app.metraj.room_fill_polygons(&app.tabs[i]).is_empty());
+        assert!(!app.metraj.project.as_ref().unwrap().room_fill_enabled().unwrap());
+        let _ = app.on_metraj(MetrajMsg::RoomFill(true));
+        assert_eq!(app.metraj.room_fill_polygons(&app.tabs[i]).len(), 2);
+        assert_eq!(app.tabs[i].scene.document.entities().count(), count);
+        assert_eq!(app.tabs[i].scene.geometry_epoch, epoch);
+        let mut changed = match app.tabs[i].scene.document.get_entity(first).unwrap() {
+            codec::EntityType::LwPolyline(p) => p.clone(), _ => unreachable!(),
+        };
+        changed.vertices[1] = codec::entities::lwpolyline::LwVertex::from_coords(8., 0.);
+        app.tabs[i].scene.update_entity(codec::EntityType::LwPolyline(changed));
+        assert!(!std::sync::Arc::ptr_eq(&polygons, &app.metraj.room_fill_polygons(&app.tabs[i])));
+    }
+
+    #[test]
+    fn room_fill_render_respects_concave_boundary_and_toggle() {
+        let _renderer_lock = crate::headless_ui_lock();
+        use codec::entities::lwpolyline::{LwPolyline, LwVertex};
+        use glam::DVec3;
+        use iced::{widget::container, Fill, Rectangle, Size, Theme};
+        let mut app = metraj_app();
+        let mut polyline = LwPolyline::new();
+        polyline.is_closed = true;
+        polyline.vertices = [(0., 0.), (4., 0.), (4., 1.), (1., 1.), (1., 3.), (0., 3.)]
+            .into_iter().map(|(x, y)| LwVertex::from_coords(x, y)).collect();
+        let i = app.active_tab;
+        let boundary = app.tabs[i].scene.add_entity(codec::EntityType::LwPolyline(polyline));
+        app.tabs[i].scene.select_entity(boundary, true);
+        let _ = app.dispatch_command("NM");
+        app.tabs[i].scene.camera.borrow_mut().fit_to_bounds_f64(
+            DVec3::new(-1., -1., 0.), DVec3::new(5., 4., 0.), 2.);
+        let camera = app.tabs[i].scene.camera.borrow().clone();
+        let bounds = Rectangle::with_size(Size::new(640., 320.));
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let folder = std::env::temp_dir().join(format!("ocs-room-fill-{}-{nonce}", std::process::id()));
+        for (case, (enabled, rgb, transparency)) in [
+            (true, [255, 0, 0], 50), (true, [255, 0, 0], 0),
+            (true, [0, 255, 0], 0), (true, [0, 255, 0], 100),
+            (false, [0, 0, 255], 0),
+        ].into_iter().enumerate() {
+            let [r, g, b] = rgb;
+            let _ = app.on_metraj(MetrajMsg::RoomFillColor(codec::types::Color::Rgb { r, g, b }));
+            let _ = app.on_metraj(MetrajMsg::RoomFillTransparency(transparency));
+            let _ = app.on_metraj(MetrajMsg::RoomFill(enabled));
+            let snapshot = {
+                let view = container(app.metraj_room_fill_overlay(&app.tabs[i]))
+                    .width(Fill).height(Fill)
+                    .style(|_| container::Style::default().background(iced::Color::BLACK));
+                iced_test::Simulator::with_size(Default::default(), bounds.size(), view)
+                    .snapshot(&Theme::Dark).unwrap()
+            };
+            snapshot.matches_image(folder.join(format!("case-{case}.png"))).unwrap();
+            let path = std::fs::read_dir(&folder).unwrap().map(|entry| entry.unwrap().path())
+                .next().unwrap();
+            let image = image::open(&path).unwrap().to_rgba8();
+            let pixel = |x, y| {
+                let point = camera.project(DVec3::new(x, y, 0.), bounds).unwrap();
+                *image.get_pixel((point.x * image.width() as f32 / bounds.width) as u32,
+                    (point.y * image.height() as f32 / bounds.height) as u32)
+            };
+            let background = pixel(-0.5, -0.5);
+            assert_eq!(pixel(3., 2.), background, "concave cutout must stay unfilled");
+            let interior = pixel(2., 0.5);
+            let visible = enabled && transparency < 100;
+            assert_eq!(interior != background, visible, "room interior follows toggle and transparency");
+            if visible {
+                for channel in 0..3 {
+                    if rgb[channel] == 0 { assert_eq!(interior[channel], 0); }
+                    else if transparency == 0 { assert_eq!(interior[channel], 255); }
+                    else { assert!(interior[channel] > 0 && interior[channel] < 255); }
+                }
+            }
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(folder).unwrap();
     }
 
     #[test]

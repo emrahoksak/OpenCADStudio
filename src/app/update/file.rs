@@ -2009,6 +2009,9 @@ impl OpenCADStudio {
         )?;
 
         if set_current_path {
+            let previous_path = self.tabs[i].current_path.clone();
+            self.relink_metraj_after_save(i, previous_path.as_deref(), &path)
+                .map_err(crate::io::SaveFailure::other)?;
             self.tabs[i].current_path = Some(path.clone());
             self.tabs[i].scene.document.version = version;
         }
@@ -3846,6 +3849,23 @@ impl OpenCADStudio {
                 }
                 crate::app::SaveContinuation::None => Task::none(),
             };
+        }
+
+        if outcome.set_current_path && outcome.purpose != crate::app::SavePurpose::Autosave {
+            let previous_path = self.tabs[i].current_path.clone();
+            if let Err(error) =
+                self.relink_metraj_after_save(i, previous_path.as_deref(), &outcome.path)
+            {
+                self.metraj.status = error.clone();
+                self.command_line.push_error(&error);
+                self.tabs[i].dirty = true;
+                self.restore_failed_save_continuation(outcome.continuation, i);
+                return if outcome.continuation == crate::app::SaveContinuation::None {
+                    Task::none()
+                } else {
+                    self.open_unsaved_dialog_window()
+                };
+            }
         }
 
         let snapshot_is_current = self.tabs[i].scene.geometry_epoch == outcome.epoch

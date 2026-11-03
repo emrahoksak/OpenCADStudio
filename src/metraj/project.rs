@@ -8,6 +8,13 @@ CREATE TABLE IF NOT EXISTS project (
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     default_height_m REAL NOT NULL DEFAULT 2.80 CHECK (default_height_m >= 0)
 );
+CREATE TABLE IF NOT EXISTS metraj_session (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    project_id INTEGER REFERENCES project(id) ON DELETE SET NULL,
+    room_fill INTEGER NOT NULL DEFAULT 1 CHECK (room_fill IN (0, 1)),
+    room_fill_rgb INTEGER NOT NULL DEFAULT 4227327 CHECK (room_fill_rgb BETWEEN 0 AND 16777215),
+    room_fill_transparency INTEGER NOT NULL DEFAULT 88 CHECK (room_fill_transparency BETWEEN 0 AND 100)
+);
 CREATE TABLE IF NOT EXISTS work_group (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL DEFAULT 1 REFERENCES project(id) ON DELETE CASCADE,
@@ -219,6 +226,21 @@ pub struct Project {
 
 impl Project {
     fn ensure_project_height(db: &Connection) -> rusqlite::Result<()> {
+        let session_columns = {
+            let mut columns = db.prepare("PRAGMA table_info(metraj_session)")?;
+            let names = columns.query_map([], |row| row.get::<_, String>(1))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            names
+        };
+        if !session_columns.iter().any(|name| name == "room_fill") {
+            db.execute_batch("ALTER TABLE metraj_session ADD COLUMN room_fill INTEGER NOT NULL DEFAULT 1 CHECK(room_fill IN (0,1))")?;
+        }
+        if !session_columns.iter().any(|name| name == "room_fill_rgb") {
+            db.execute_batch("ALTER TABLE metraj_session ADD COLUMN room_fill_rgb INTEGER NOT NULL DEFAULT 4227327 CHECK(room_fill_rgb BETWEEN 0 AND 16777215)")?;
+        }
+        if !session_columns.iter().any(|name| name == "room_fill_transparency") {
+            db.execute_batch("ALTER TABLE metraj_session ADD COLUMN room_fill_transparency INTEGER NOT NULL DEFAULT 88 CHECK(room_fill_transparency BETWEEN 0 AND 100)")?;
+        }
         let rebar_columns = {
             let mut columns = db.prepare("PRAGMA table_info(rebar_settings)")?;
             let names = columns
@@ -367,8 +389,11 @@ impl Project {
         let db = Connection::open(path)?;
         db.execute_batch(SCHEMA)?;
         Self::ensure_project_height(&db)?;
+        let transaction = db.unchecked_transaction()?;
         db.execute("INSERT INTO project(name) VALUES (?1)", [name.trim()])?;
         let id = db.last_insert_rowid();
+        Self::remember_opened(&db, id)?;
+        transaction.commit()?;
         Ok(Self { db, id })
     }
 
@@ -376,18 +401,94 @@ impl Project {
         let db = Connection::open(path)?;
         db.execute_batch(SCHEMA)?;
         Self::ensure_project_height(&db)?;
+        let transaction = db.unchecked_transaction()?;
         db.query_row("SELECT id FROM project WHERE id = ?1", [id], |row| {
             row.get::<_, i64>(0)
         })?;
         db.execute("UPDATE room SET boundary_valid = 0 WHERE project_id = ?1 AND drawing_path LIKE 'ocs-unsaved-tab:%'", [id])?;
+        Self::remember_opened(&db, id)?;
+        transaction.commit()?;
         Ok(Self { db, id })
+    }
+
+    fn remember_opened(db: &Connection, id: i64) -> rusqlite::Result<()> {
+        db.execute(
+            "INSERT INTO metraj_session(id, project_id) VALUES (1, ?1)
+             ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id",
+            [id],
+        )?;
+        Ok(())
+    }
+
+    pub fn restore_shared(path: impl AsRef<Path>) -> rusqlite::Result<Option<Self>> {
+        let db = Connection::open(path.as_ref())?;
+        db.execute_batch(SCHEMA)?;
+        Self::ensure_project_height(&db)?;
+        // Older databases have no session row: reopen their newest project.
+        let id: Option<i64> = db.query_row(
+            "SELECT COALESCE(
+                (SELECT p.id FROM project p JOIN metraj_session s ON s.project_id = p.id WHERE s.id = 1),
+                (SELECT MAX(id) FROM project))",
+            [],
+            |row| row.get(0),
+        )?;
+        drop(db);
+        id.map(|id| Self::open_shared(path, id)).transpose()
     }
 
     pub fn id(&self) -> i64 {
         self.id
     }
+
+    pub fn remove_project(&self) -> rusqlite::Result<()> {
+        let transaction = self.db.unchecked_transaction()?;
+        if self.db.execute("DELETE FROM project WHERE id = ?1", [self.id])? != 1 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn room_fill_enabled(&self) -> rusqlite::Result<bool> {
+        self.db.query_row(
+            "SELECT COALESCE((SELECT room_fill FROM metraj_session WHERE id = 1), 1)",
+            [], |row| row.get(0),
+        )
+    }
+
+    pub fn set_room_fill_enabled(&self, enabled: bool) -> rusqlite::Result<()> {
+        self.db.execute(
+            "INSERT INTO metraj_session(id, room_fill) VALUES(1, ?1)
+             ON CONFLICT(id) DO UPDATE SET room_fill = excluded.room_fill",
+            [enabled],
+        )?;
+        Ok(())
+    }
     pub fn summary_revision(&self) -> u64 {
         self.db.total_changes()
+    }
+
+    pub fn room_fill_style(&self) -> rusqlite::Result<([u8; 3], u8)> {
+        let (rgb, transparency): (u32, u8) = self.db.query_row(
+            "SELECT COALESCE((SELECT room_fill_rgb FROM metraj_session WHERE id = 1), 4227327),
+                    COALESCE((SELECT room_fill_transparency FROM metraj_session WHERE id = 1), 88)",
+            [], |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        Ok(([(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8], transparency))
+    }
+
+    pub fn set_room_fill_style(&self, rgb: [u8; 3], transparency: u8) -> rusqlite::Result<()> {
+        if transparency > 100 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let rgb = (u32::from(rgb[0]) << 16) | (u32::from(rgb[1]) << 8) | u32::from(rgb[2]);
+        self.db.execute(
+            "INSERT INTO metraj_session(id, room_fill_rgb, room_fill_transparency) VALUES(1, ?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET room_fill_rgb = excluded.room_fill_rgb,
+                                          room_fill_transparency = excluded.room_fill_transparency",
+            params![rgb, transparency],
+        )?;
+        Ok(())
     }
 
     /// Copy a standalone metraj file into the shared database. The source file is read only.
@@ -1211,6 +1312,77 @@ fn quantity_mode_parts(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn project_delete_is_atomic_cascades_and_preserves_other_projects() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("ocs-delete-project-{}-{nonce}.sqlite", std::process::id()));
+        let a = Project::create_shared(&path, "A").unwrap();
+        let b = Project::create_shared(&path, "B").unwrap();
+        for project in [&a, &b] {
+            let group = project.add_group("G").unwrap();
+            let floor = project.add_floor(group, "F").unwrap();
+            let room = project.add_room(floor, "R").unwrap();
+            let item = project.add_item("I", Unit::SquareMeter, "01", "").unwrap();
+            let bundle = project.add_quantity_group("Bundle").unwrap();
+            project.add_group_item(bundle, item).unwrap();
+            let assignment = project.assign(room, RoomSection::Floor, item, QuantityMode::Manual(10.)).unwrap();
+            project.add_deduction(assignment, "Minha", 2.).unwrap();
+            project.save_rebar_settings(&Default::default()).unwrap();
+            project.add_rebar(&[crate::metraj::rebar::RebarEntry::manual(2, 16, 250., false).unwrap()]).unwrap();
+        }
+        a.db.execute_batch("CREATE TRIGGER reject_project_delete BEFORE DELETE ON rebar_measurement
+            BEGIN SELECT RAISE(FAIL, 'test write failure'); END").unwrap();
+        assert!(a.remove_project().is_err());
+        assert_eq!(a.groups().unwrap().len(), 1);
+        assert_eq!(a.items().unwrap().len(), 1);
+        assert_eq!(Project::list_shared(&path).unwrap().len(), 2);
+        a.db.execute_batch("DROP TRIGGER reject_project_delete").unwrap();
+        a.remove_project().unwrap();
+        for table in ["project", "work_group", "floor", "room", "item", "quantity_group",
+            "quantity_group_item", "assignment", "deduction", "rebar_settings", "rebar_measurement"] {
+            let count: i64 = b.db.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0)).unwrap();
+            assert_eq!(count, 1, "{table}");
+        }
+        assert_eq!(b.name().unwrap(), "B");
+        assert_eq!(Project::restore_shared(&path).unwrap().unwrap().id(), b.id());
+        b.remove_project().unwrap();
+        assert!(Project::restore_shared(&path).unwrap().is_none());
+        assert!(Project::list_shared(&path).unwrap().is_empty());
+        drop(a); drop(b);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn room_fill_setting_upgrades_old_session_and_survives_project_changes() {
+        let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("ocs-fill-setting-{}-{nonce}.sqlite", std::process::id()));
+        let a = Project::create_shared(&path, "A").unwrap();
+        let b = Project::create_shared(&path, "B").unwrap();
+        a.db.execute_batch("DROP TABLE metraj_session;
+            CREATE TABLE metraj_session(id INTEGER PRIMARY KEY, project_id INTEGER REFERENCES project(id) ON DELETE SET NULL);").unwrap();
+        let restored = Project::open_shared(&path, a.id()).unwrap();
+        assert!(restored.room_fill_enabled().unwrap());
+        assert_eq!(restored.room_fill_style().unwrap(), ([64, 128, 255], 88));
+        restored.set_room_fill_style([12, 34, 56], 37).unwrap();
+        assert!(restored.set_room_fill_style([255, 0, 0], 101).is_err());
+        assert_eq!(restored.room_fill_style().unwrap(), ([12, 34, 56], 37));
+        restored.set_room_fill_enabled(false).unwrap();
+        let other = Project::open_shared(&path, b.id()).unwrap();
+        assert!(!other.room_fill_enabled().unwrap());
+        assert_eq!(other.room_fill_style().unwrap(), ([12, 34, 56], 37));
+        other.db.pragma_update(None, "query_only", true).unwrap();
+        assert!(other.set_room_fill_style([255, 0, 0], 0).is_err());
+        assert_eq!(other.room_fill_style().unwrap(), ([12, 34, 56], 37));
+        assert!(other.set_room_fill_enabled(true).is_err());
+        assert!(!other.room_fill_enabled().unwrap());
+        drop(other); drop(restored); drop(a); drop(b);
+        let reopened = Project::restore_shared(&path).unwrap().unwrap();
+        assert!(!reopened.room_fill_enabled().unwrap());
+        assert_eq!(reopened.room_fill_style().unwrap(), ([12, 34, 56], 37));
+        drop(reopened);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn remove_rooms_is_atomic_and_cascades_only_room_data() {

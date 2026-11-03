@@ -2,6 +2,85 @@ use super::{drawing_key, Message, OpenCADStudio};
 use codec::Handle;
 use iced::Task;
 
+pub(crate) struct PendingProjectDelete {
+    project_id: i64,
+    path: Option<std::path::PathBuf>,
+    name: String,
+}
+
+impl OpenCADStudio {
+    pub(super) fn request_metraj_project_delete(&mut self) -> Task<Message> {
+        let Some(project) = self.metraj.project.as_ref() else {
+            return Task::none();
+        };
+        if self.tabs[self.active_tab].active_cmd.is_some() {
+            self.metraj.status = "Proje silmeden önce etkin çizim komutunu bitirin.".into();
+            return Task::none();
+        }
+        match project.name() {
+            Ok(name) => {
+                self.metraj.pending_project_delete = Some(PendingProjectDelete {
+                    project_id: project.id(),
+                    path: self.metraj.project_path.clone(),
+                    name,
+                });
+                self.active_modal = Some(crate::app::ModalKind::MetrajProjectDeleteWarning);
+            }
+            Err(error) => self.metraj.status = error.to_string(),
+        }
+        Task::none()
+    }
+
+    pub(crate) fn metraj_project_delete_description(&self) -> String {
+        let Some(pending) = &self.metraj.pending_project_delete else {
+            return String::new();
+        };
+        format!(
+            "“{}” projesi silinsin mi?\n\nBu projeye ait iş grupları, katlar, mahaller, poz tanımları, grup pozları, atamalar, minhalar ve demir kayıtları kalıcı olarak silinecek. Bu işlem geri alınamaz.\n\nÇizim dosyaları ve çizim elemanları korunur.",
+            pending.name
+        )
+    }
+
+    pub(super) fn confirm_metraj_project_delete(&mut self) -> Task<Message> {
+        if self.active_modal != Some(crate::app::ModalKind::MetrajProjectDeleteWarning) {
+            return Task::none();
+        }
+        let Some(pending) = self.metraj.pending_project_delete.take() else {
+            return Task::none();
+        };
+        self.close_active_modal();
+        let result = (|| -> Result<(), String> {
+            let project = self.metraj.project.as_ref().ok_or("Proje kapandı; silme iptal edildi.")?;
+            if project.id() != pending.project_id || self.metraj.project_path != pending.path {
+                return Err("Proje değişti; silme iptal edildi.".into());
+            }
+            if self.tabs[self.active_tab].active_cmd.is_some() {
+                return Err("Proje silmeden önce etkin çizim komutunu bitirin.".into());
+            }
+            project.remove_project().map_err(|error| format!("Proje silinemedi: {error}"))?;
+            let mut state = super::MetrajUi::default();
+            state.show_tree = self.metraj.show_tree;
+            state.show_items = self.metraj.show_items;
+            state.show_assignments = self.metraj.show_assignments;
+            state.show_summary = self.metraj.show_summary;
+            state.rebar.show = self.metraj.rebar.show;
+            state.room_fill_enabled = self.metraj.room_fill_enabled;
+            state.room_fill_color = self.metraj.room_fill_color;
+            state.room_fill_transparency = self.metraj.room_fill_transparency;
+            self.metraj = state;
+            if let Some(path) = pending.path {
+                self.metraj.restore_from(&path)?;
+            }
+            self.metraj.status = format!("“{}” projesi silindi.", pending.name);
+            Ok(())
+        })();
+        if let Err(error) = result {
+            self.metraj.status = error;
+        }
+        Task::none()
+    }
+}
+
 pub(crate) struct PendingRoomDelete {
     tab_id: u64,
     project_id: i64,

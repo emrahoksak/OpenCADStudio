@@ -1935,6 +1935,10 @@ bg={bg_ms:.1}ms n={view_count}"
         };
 
         mark("viewport_stack");
+        #[cfg(not(target_arch = "wasm32"))]
+        let room_fill_overlay = self.metraj_room_fill_overlay(tab);
+        #[cfg(target_arch = "wasm32")]
+        let room_fill_overlay: Element<'_, Message> = Space::new().width(Fill).height(Fill).into();
         let mut viewport_stack = if tab.is_start || self.layout_settling {
             // Start tab: only the welcome widget over a flat background.
             // Skip every drawing-only overlay (selection markers, snap info,
@@ -1974,6 +1978,7 @@ bg={bg_ms:.1}ms n={view_count}"
                     .height(Fill),
                 viewport_3d,
                 grid_overlay,
+                room_fill_overlay,
                 selection_overlay,
                 viewport_mouse,
             ]
@@ -1990,6 +1995,7 @@ bg={bg_ms:.1}ms n={view_count}"
                     .height(Fill),
                 viewport_3d,
                 grid_overlay,
+                room_fill_overlay,
                 selection_overlay,
             ]
             .width(Fill)

@@ -257,6 +257,8 @@ impl OpenCADStudio {
             Some(LayerDeleteWarning) => self.layer_delete_pending = None,
             #[cfg(not(target_arch = "wasm32"))]
             Some(MetrajDeleteWarning) => self.metraj.pending_delete = None,
+            #[cfg(not(target_arch = "wasm32"))]
+            Some(MetrajProjectDeleteWarning) => self.metraj.pending_project_delete = None,
             // Cancel: drop the working copy without touching the block.
             Some(AttributeEditor) => {
                 self.attr_editor_handle = None;

@@ -1200,6 +1200,8 @@ impl OpenCADStudio {
                 UiColor::Crosshair => Message::CrosshairColorChanged(hex),
                 UiColor::SnapMarker => Message::SnapMarkerColorChanged(hex),
                 UiColor::CommandText => Message::CommandTextColorChanged(hex),
+                #[cfg(not(target_arch = "wasm32"))]
+                UiColor::MetrajRoomFill => Message::Metraj(crate::app::metraj::MetrajMsg::RoomFillColor(color)),
             });
         }
         if matches!(

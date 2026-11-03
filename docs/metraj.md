@@ -2,6 +2,8 @@
 
 Metraj, masaüstü OpenCADStudio içinde çalışır. `METRAJ` komutu soldaki mahal ağacını ve sağdaki **Metraj kalemleri** ile **Metraj atamaları** panellerini açar. Projeler aynı SQLite veritabanında proje kimliğiyle ayrılır; çizim geometrisi CAD dosyasında kalır.
 
+Veritabanı, hem Debug hem Release sürümünde kullanıcı ayar dizinindeki **OpenCADStudio/metraj.sqlite** dosyasıdır. Windows'ta bu konum `%APPDATA%/OpenCADStudio/metraj.sqlite` olur. Son oluşturulan veya seçilen proje aynı veritabanında hatırlanır; uygulama açılışında proje, mahal/poz kayıtları ve demir verileri yeniden yüklenir. Eski veritabanında kayıtlı seçim yoksa en son oluşturulan proje açılır. Önceden yerleştirilmiş metraj panelleri de açılır. Erişim hataları boş bir veritabanına geçilerek gizlenmez. Eski `metraj-data/metraj.sqlite` dosyası korunur; içindeki projeler gerekirse SQLite içe aktarma ile alınabilir.
+
 ## Mahaller
 
 Proje seçimi ve mahal filtresi ağacın üstündedir. **Proje ve mahal düzeni** başlığını açarak proje, iş grubu, kat ve mahal oluşturabilirsiniz. Ağaç sırası iş grubu, kat, mahal, bölüm ve atanmış kalemdir. Her seviye bağımsız açılıp kapanır. Mahal filtresi ad, kat ve iş grubunda arama yapar.
@@ -28,6 +30,8 @@ Kalem satırları ve grup tutamaçları mahal ağacındaki mahal veya bölüme y
 
 Kaydedilmemiş çizimlerde de mahal oluşturulabilir. İlk kayıtta SQLite bağlantısı çizim dosyasına taşınır. Çizim kaydedilmeden uygulama kapanırsa sınır yeniden açılışta geçersiz sayılır.
 
+**Kaydet ve kapat** işleminde de çizim bağlantısı sekme kapanmadan önce taşınır. DWG/DXF çizimini kaydetmek gerekir; SQLite, çizimin geometrisinin yerine geçmez. Kaydedilmemiş bir önceki oturumun mahalleri yeni boş çizime otomatik bağlanmaz; mahal, poz ve demir kayıtları veritabanında korunur.
+
 Bu modül uygulama içine kayıtlıdır. OpenCADStudio güncellemeleri uygulanabilir; modülün çekirdek bağlantıları yeni sürüme birleştirilmelidir.
 
 ## İcmal ve Excel
@@ -47,6 +51,12 @@ Birden fazla hedefte hata oluşursa hiçbir hedefe kısmi kayıt bırakılmaz. S
 **Poz oluştur** formu hem kalemler hem atamalar panelinde aynı açılır bölüm olarak bulunur. İki panel aynı katalog, alan değerleri ve ölçü birimini kullanır. Poz oluşturmak atama yapmaz; atama için kalemi seçip **Uygula** düğmesine basın.
 
 ## Mahal komutları ve silme
+
+Metraj proje seçicisinin yanındaki **Sil**, seçili projeyi onay penceresiyle siler. Projenin iş grupları, katları, mahalleri, poz tanımları ve grupları, atamaları, minha ve demir kayıtları birlikte kaldırılır. Diğer projeler korunur. Çizim dosyaları ve çizim nesneleri silinmez. İşlem geri alınamaz; veritabanı hatasında kısmi silme yapılmaz.
+
+**Tüm mahallerin dolgusunu göster**, açık çizimdeki bütün mahal sınırlarının içini seçim kutusuna benzer saydam renkle gösterir. Tek seçenek bütün mahaller için geçerlidir ve uygulama yeniden açıldığında korunur. Dolgu yalnızca ekranda gösterilir; CAD nesnesi oluşturmaz ve çizimi değiştirmez. Gizli katmanlardaki mahaller gösterilmez.
+
+**Dolgu ayarları** açılır bölümünde renk kutusuna tıklayarak uygulamanın renk paletinden ACI veya RGB rengi seçebilirsiniz. **Şeffaflık**, %0'da opak, %100'de tamamen görünmez dolgu üretir. Değişiklikler anında bütün mahallere uygulanır ve ortak SQLite veritabanında saklanır. Dolgu kapalıyken de renk ve şeffaflık ayarlanabilir; CAD seçim kutusunun ayarları etkilenmez.
 
 `NM`, seçili kapalı polyline/rectangle için etkin katta otomatik ve benzersiz bir adla yeni mahal oluşturur: **Mahal 1**, **Mahal 2** gibi. Başka bir mahal seçili olsa da onun sınırını değiştirmez. Aynı sınır ikinci kez dönüştürülemez. Ön seçim yoksa komut nesne seçimi ister.
 

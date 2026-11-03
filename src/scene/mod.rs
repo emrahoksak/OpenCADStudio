@@ -11044,6 +11044,17 @@ impl Scene {
             .collect()
     }
 
+    /// Filter a small set of overlay boundaries through the scene's visibility rules.
+    pub(crate) fn visible_overlay_handles(&self, handles: &[Handle]) -> Vec<Handle> {
+        let frozen = self.active_viewport.map(|vp| self.viewport_hidden_handles(vp));
+        let block = self.interaction_block_handle();
+        handles.iter().copied().filter(|handle| {
+            self.document.get_entity(*handle).is_some_and(|entity| {
+                self.resident_entity_visible(entity, block, frozen.as_ref(), None, true)
+            })
+        }).collect()
+    }
+
     /// Only the handles of editable, visible HATCH entities. Modification
     /// commands need these in addition to the wire-based entity list: hatch
     /// fills are rendered separately and otherwise never reach TRIM.

@@ -111,6 +111,8 @@ impl OpenCADStudio {
             Some(K::LayerDeleteWarning) => crate::tr!("modal", "delete-layer"),
             #[cfg(not(target_arch = "wasm32"))]
             Some(K::MetrajDeleteWarning) => "Mahal silme onayı".into(),
+            #[cfg(not(target_arch = "wasm32"))]
+            Some(K::MetrajProjectDeleteWarning) => "Metraj projesini sil".into(),
             Some(K::Unsaved) => crate::tr!("modal", "unsaved-changes"),
             Some(K::BlockEditChanges) => crate::t!("Block - Save Parameter Changes?").into_owned(),
             Some(K::BlockEditPicker) => crate::t!("Edit Block Definition").into_owned(),
@@ -1845,6 +1847,28 @@ impl OpenCADStudio {
                                 Message::Metraj(crate::app::metraj::MetrajMsg::ConfirmDelete),
                                 button::danger
                             ),
+                            Space::new().width(8),
+                            dialog_button(t!("Cancel"), Message::CloseModal, button::secondary),
+                        ],
+                    ])
+                    .style(dialog_body_style)
+                    .center_x(flow.width)
+                    .center_y(flow.height)
+                    .padding([24, 28])
+                    .into()
+                })
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            super::super::ModalKind::MetrajProjectDeleteWarning => {
+                let description = self.metraj_project_delete_description();
+                automatic_flow(ex, |flow| {
+                    container(column![
+                        text(description.clone()).size(13),
+                        Space::new().height(20),
+                        row![
+                            dialog_button("Projeyi sil",
+                                Message::Metraj(crate::app::metraj::MetrajMsg::ConfirmDeleteProject),
+                                button::danger),
                             Space::new().width(8),
                             dialog_button(t!("Cancel"), Message::CloseModal, button::secondary),
                         ],

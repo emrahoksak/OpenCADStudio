@@ -5,7 +5,7 @@ use super::{
 use crate::ui::style::common::muted_style;
 use crate::ui::style::form::{button_style, field_style};
 use iced::widget::{
-    button, column, container, mouse_area, pick_list, row, scrollable, text, text_input, tooltip,
+    button, checkbox, column, container, mouse_area, pick_list, row, scrollable, slider, text, text_input, tooltip,
     Space,
 };
 use iced::{Background, Border, Element, Fill, Theme};
@@ -477,8 +477,46 @@ impl MetrajUi {
                 }
             }
         }
+        let mut fill_controls = column![
+            checkbox(self.room_fill_enabled)
+                .label("Tüm mahallerin dolgusunu göster")
+                .on_toggle_maybe(self.project.as_ref().map(|_| |value| send(MetrajMsg::RoomFill(value))))
+                .size(14)
+                .text_size(FONT),
+            heading(
+                "Dolgu ayarları".into(), self.room_fill_settings_open, MetrajMsg::ToggleRoomFillSettings,
+            ),
+        ].spacing(4);
+        if self.room_fill_settings_open && self.project.is_some() {
+            let [r, g, b] = self.room_fill_color;
+            let color = codec::types::Color::Rgb { r, g, b };
+            fill_controls = fill_controls
+                .push(row![
+                    text("Renk").size(FONT).width(65),
+                    button(row![
+                        crate::ui::color_select::swatch(iced::Color::from_rgb8(r, g, b)),
+                        text(crate::ui::color_select::color_display_name(color)).size(FONT),
+                    ].spacing(5).align_y(iced::Center))
+                    .on_press(Message::OpenColorWindow(
+                        crate::app::ColorPickTarget::Interface(crate::app::UiColor::MetrajRoomFill), color,
+                    ))
+                    .padding([4, 6]).height(ROW).width(Fill).style(button_style(false)),
+                ].spacing(4).align_y(iced::Center))
+                .push(row![
+                    text("Şeffaflık").size(FONT).width(65),
+                    slider(0..=100, self.room_fill_transparency,
+                        |value| send(MetrajMsg::RoomFillTransparency(value))).width(Fill),
+                    text(format!("%{}", self.room_fill_transparency)).size(FONT).width(32),
+                ].spacing(4).align_y(iced::Center));
+        }
         let mut layout = column![
-            project_picker,
+            row![
+                project_picker,
+                action("Sil", MetrajMsg::RequestDeleteProject, false)
+                    .style(button::danger)
+                    .on_press_maybe(self.project.as_ref().map(|_| send(MetrajMsg::RequestDeleteProject))),
+            ].spacing(4),
+            fill_controls,
             input(
                 "Mahal / kat / iş grubu ara…",
                 &self.room_filter,
