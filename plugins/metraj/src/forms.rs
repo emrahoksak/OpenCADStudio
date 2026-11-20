@@ -71,8 +71,9 @@ pub fn run(
         }
         let panel = match command {
             "METRAJ_KAYIT_SIL" => host.panel_snapshot(crate::panels::ITEMS).ok(),
-            "METRAJ_DEMIR_SIL" | "METRAJ_DEMIR_MANUEL" => {
-                host.panel_snapshot(crate::panels::REBAR).ok()
+            "METRAJ_DEMIR_SIL" => host.panel_snapshot(crate::panels::REBAR).ok(),
+            "METRAJ_PROJE_SIL" | "METRAJ_GRUP" | "METRAJ_GRUP_SIL" => {
+                host.panel_snapshot(crate::panels::SETTINGS).ok()
             }
             _ => None,
         };
@@ -128,6 +129,10 @@ pub fn run(
         state.command.as_str(),
         "METRAJ_AKTAR"
             | "METRAJ_DUZENLE"
+            | "METRAJ_PROJE"
+            | "METRAJ_PROJE_SIL"
+            | "METRAJ_GRUP"
+            | "METRAJ_GRUP_SIL"
             | "METRAJ_KALEM_DUZENLE"
             | "METRAJ_KALEM_SIL"
             | "METRAJ_KAYIT_SIL"
@@ -136,7 +141,8 @@ pub fn run(
             | "METRAJ_DEMIR_MANUEL"
     ) {
         let refresh = match state.command.as_str() {
-            "METRAJ_AKTAR" | "METRAJ_DUZENLE" => crate::panels::refresh(host, &store),
+            "METRAJ_AKTAR" | "METRAJ_DUZENLE" | "METRAJ_PROJE" | "METRAJ_PROJE_SIL"
+            | "METRAJ_GRUP" | "METRAJ_GRUP_SIL" => crate::panels::refresh(host, &store),
             "METRAJ_DEMIR_SIL" | "METRAJ_DEMIR_MANUEL" => {
                 crate::panels::refresh_measurements(host, &store, crate::panels::REBAR)
             }

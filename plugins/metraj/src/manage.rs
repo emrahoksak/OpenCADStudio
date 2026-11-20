@@ -8,11 +8,6 @@ use std::collections::BTreeMap;
 
 pub fn manual_rebar(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
     let (p, g) = active_group(s)?;
-    let default_sign = host
-        .panel_snapshot(crate::panels::REBAR)
-        .ok()
-        .and_then(|panel| index(&panel.values, "sign").ok())
-        .unwrap_or_default();
     let dialog = DialogDef::new("Manuel Demir Metrajı")
         .width(320.0)
         .with_control(text("quantity", "Adet", "1"))
@@ -22,7 +17,7 @@ pub fn manual_rebar(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String>
             id: "sign".into(),
             label: "İşlem".into(),
             options: vec!["Metraj".into(), "Minha".into()],
-            default_index: default_sign,
+            default_index: 0,
         })
         .submit_label("Kaydet")
         .cancel_label("Vazgeç");
@@ -109,7 +104,7 @@ pub fn delete_item(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> 
     Ok(())
 }
 
-fn confirm(host: &mut dyn HostApi, message: &str) -> bool {
+pub(crate) fn confirm(host: &mut dyn HostApi, message: &str) -> bool {
     matches!(
         host.show_dialog(
             DialogDef::new("Onay")
@@ -182,80 +177,55 @@ pub fn edit_item(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
     host.push_info("Kalem kaydedildi.");
     Ok(())
 }
-pub fn edit(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
+pub fn rename(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
     let p = active_project(s)?;
-    let group_index = active_group(s).ok().map(|(_, g)| g);
+    let active_group_index = active_group(s).ok().map(|(_, g)| g);
     let mut scopes = vec!["Seçili proje".into()];
-    if group_index.is_some() {
+    if active_group_index.is_some() {
         scopes.push("Etkin grup".into());
     }
-    let Some(v) = values(
-        host,
-        "Proje ve grup yönetimi",
-        vec![
-            choice("scope", "Tür", scopes),
-            choice("action", "İşlem", vec!["Ad değiştir".into(), "Sil".into()]),
-        ],
-    ) else {
+    let Some(v) = values(host, "Ad Değiştir", vec![choice("scope", "Tür", scopes)]) else {
         return Ok(());
     };
     let group_index = match index(&v, "scope")? {
         0 => None,
-        1 => Some(group_index.ok_or("Etkin grup bulunamadı.")?),
+        1 => Some(active_group_index.ok_or("Etkin grup bulunamadı.")?),
         _ => return Err("Tür bulunamadı.".into()),
     };
     let old = match group_index {
         Some(g) => s.projects[p].groups[g].name.clone(),
         None => s.projects[p].name.clone(),
     };
-    if index(&v, "action")? == 1 {
-        if !confirm(
-            host,
-            &format!("{old} ve içerdiği tüm kayıtlar silinsin mi?"),
-        ) {
-            return Ok(());
+    let Some(v) = values(host, "Ad Değiştir", vec![text("name", "Yeni ad", &old)]) else {
+        return Ok(());
+    };
+    let name = string(&v, "name")?;
+    if name.is_empty() {
+        return Err("Ad boş olamaz.".into());
+    }
+    if let Some(g) = group_index {
+        let groups = &mut s.projects[p].groups;
+        if groups
+            .iter()
+            .enumerate()
+            .any(|(i, other)| i != g && other.name.eq_ignore_ascii_case(&name))
+        {
+            return Err("Bu grup adı zaten var.".into());
         }
-        match group_index {
-            Some(g) => {
-                s.projects[p].groups.remove(g);
-            }
-            None => {
-                s.projects.remove(p);
-            }
-        }
+        groups[g].name = name.clone();
         s.save()?;
+        crate::panels::rename_group(&old, name);
     } else {
-        let Some(v) = values(host, "Ad değiştir", vec![text("name", "Yeni ad", &old)]) else {
-            return Ok(());
-        };
-        let name = string(&v, "name")?;
-        if name.is_empty() {
-            return Err("Ad boş olamaz.".into());
+        if s.projects
+            .iter()
+            .enumerate()
+            .any(|(i, other)| i != p && other.name.eq_ignore_ascii_case(&name))
+        {
+            return Err("Bu proje adı zaten var.".into());
         }
-        if let Some(g) = group_index {
-            let groups = &mut s.projects[p].groups;
-            if groups
-                .iter()
-                .enumerate()
-                .any(|(i, other)| i != g && other.name.eq_ignore_ascii_case(&name))
-            {
-                return Err("Bu grup adı zaten var.".into());
-            }
-            groups[g].name = name.clone();
-            s.save()?;
-            crate::panels::rename_group(&old, name);
-        } else {
-            if s.projects
-                .iter()
-                .enumerate()
-                .any(|(i, other)| i != p && other.name.eq_ignore_ascii_case(&name))
-            {
-                return Err("Bu proje adı zaten var.".into());
-            }
-            s.projects[p].name = name.clone();
-            s.save()?;
-            crate::panels::rename_project(&old, name);
-        }
+        s.projects[p].name = name.clone();
+        s.save()?;
+        crate::panels::rename_project(&old, name);
     }
     host.push_info("Değişiklik kaydedildi.");
     Ok(())

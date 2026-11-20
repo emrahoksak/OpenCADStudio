@@ -8,11 +8,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-const MODES: [&str; 6] = ["Mod1", "Mod2", "Yatay", "Düşey", "Adetsiz", "Mod2++"];
-
-pub(crate) fn mode_label(mode: usize) -> &'static str {
-    MODES.get(mode).copied().unwrap_or(MODES[0])
-}
+pub(crate) const MODES: &[&str] = &["Mod1", "Mod2", "Yatay", "Düşey", "Adetsiz", "Mod2++"];
 
 const COLORS: [(&str, [u8; 3]); 7] = [
     ("Kırmızı", [255, 64, 64]),
@@ -31,12 +27,6 @@ fn hex_color(rgb: [u8; 3]) -> String {
 
 pub(crate) fn settings_controls(old: &RebarSettings) -> Vec<C> {
     vec![
-        C::Choice {
-            id: "mode".into(),
-            label: "Eşleştirme modu".into(),
-            options: MODES.iter().map(|s| s.to_string()).collect(),
-            default_index: old.mode.min(MODES.len() - 1),
-        },
         text("symbols", "Çap sembolleri", &old.symbols),
         text("tolerance", "Yön toleransı", &old.tolerance.to_string()),
         C::Checkbox {
@@ -62,13 +52,6 @@ pub(crate) fn settings_controls(old: &RebarSettings) -> Vec<C> {
 
 pub(crate) fn settings_values(old: &RebarSettings) -> HashMap<String, V> {
     [
-        (
-            "mode".into(),
-            V::Choice {
-                index: old.mode.min(MODES.len() - 1),
-                text: mode_label(old.mode).into(),
-            },
-        ),
         ("symbols".into(), V::Text(old.symbols.clone())),
         ("tolerance".into(), V::Text(old.tolerance.to_string())),
         ("mixed".into(), V::Bool(old.mixed)),
@@ -98,10 +81,6 @@ pub fn save_settings(store: &mut Store, p: usize, v: &HashMap<String, V>) -> Res
         return Err("En az bir çap sembolü girin.".into());
     }
     let setting = &mut store.projects[p].settings;
-    setting.mode = index(v, "mode")?;
-    if setting.mode >= MODES.len() {
-        return Err("Mod geçersiz.".into());
-    }
     setting.symbols = symbols;
     setting.tolerance = tol;
     setting.mixed = matches!(v.get("mixed"), Some(V::Bool(true)));
@@ -283,7 +262,7 @@ fn mtext_bounds(text: &document::entities::MText) -> BoundingBox3D {
 
 pub(crate) struct CaptureOptions {
     multiplier: u32,
-    sign: f64,
+    mode: usize,
 }
 
 pub(crate) fn capture_options(v: &HashMap<String, V>) -> Result<CaptureOptions, String> {
@@ -293,10 +272,13 @@ pub(crate) fn capture_options(v: &HashMap<String, V>) -> Result<CaptureOptions, 
     if mult == 0 {
         return Err("x adet pozitif olmalı.".into());
     }
-    let sign = if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
+    let mode = index(v, "mode")?;
+    if mode >= MODES.len() {
+        return Err("Eşleştirme modu geçersiz.".into());
+    }
     Ok(CaptureOptions {
         multiplier: mult,
-        sign,
+        mode,
     })
 }
 
@@ -308,7 +290,7 @@ pub fn capture(
 ) -> Result<(), String> {
     let (p, g) = crate::panels::active_group(store)?;
     let settings = &store.projects[p].settings;
-    let CaptureOptions { multiplier, sign } = options;
+    let CaptureOptions { multiplier, mode } = options;
     let mut texts = Vec::new();
     let selected_count = entities.len();
     for entity in entities {
@@ -355,13 +337,13 @@ pub fn capture(
         ));
     }
     let mut groups: Vec<(Vec<usize>, u32, u32, f64)> = Vec::new();
-    if settings.mode == 0 {
+    if mode == 0 {
         for (i, t) in texts.iter().enumerate() {
             if let (Some((q, d)), Some(l)) = (cap(&t.text, &settings.symbols), length(&t.text)) {
                 groups.push((vec![i], q, d, l));
             }
         }
-    } else if settings.mode == 4 {
+    } else if mode == 4 {
         let mut caps = Vec::new();
         let mut lens = Vec::new();
         let mut quantities = Vec::new();
@@ -401,7 +383,7 @@ pub fn capture(
                 lens.push(i);
             }
         }
-        if settings.mode == 5 {
+        if mode == 5 {
             if caps.is_empty() || lens.len() != 1 {
                 return Err("Mod2++ için en az bir adet/çap ve tam bir L= metni seçin.".into());
             }
@@ -419,7 +401,7 @@ pub fn capture(
             groups.push((caps, quantity, diameter, texts[lens[0]].length));
             caps = Vec::new();
         }
-        let axis = match settings.mode {
+        let axis = match mode {
             2 => Some(0),
             3 => Some(1),
             _ => None,
@@ -445,7 +427,7 @@ pub fn capture(
                 let dx = b.position[0] - a.position[0];
                 let dy = b.position[1] - a.position[1];
                 let dz = b.position[2] - a.position[2];
-                let score = match settings.mode {
+                let score = match mode {
                     1 => dx * dx + dy * dy + dz * dz,
                     2 if dy.abs() <= settings.tolerance && dx > 0.0001 => dx,
                     3 if dx.abs() <= settings.tolerance && dy > 0.0001 => dy,
@@ -475,7 +457,7 @@ pub fn capture(
     let mut rows = Vec::new();
     for (ids, q, d, l) in &groups {
         let qty = q.checked_mul(multiplier).ok_or("Adet sınırı aşıldı.")?;
-        let weight = qty as f64 * l / 100.0 * (*d as f64).powi(2) / 162.0 * sign;
+        let weight = qty as f64 * l / 100.0 * (*d as f64).powi(2) / 162.0;
         if !weight.is_finite() || weight == 0.0 {
             return Err("Demir ağırlığı sıfır veya geçersiz.".into());
         }
@@ -503,6 +485,7 @@ pub fn capture(
     let selected_color = settings.color;
     let boxes = settings.bounding_box;
     let color_offset = store.projects[p].groups[g].rebar.len();
+    store.projects[p].settings.mode = mode;
     store.projects[p].groups[g].rebar.extend(rows);
     store.save()?;
     let mut updates = Vec::new();

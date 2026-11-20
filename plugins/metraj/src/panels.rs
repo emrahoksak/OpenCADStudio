@@ -1,9 +1,10 @@
 use crate::selection::{self, Measurement};
 use crate::store::{Group, Item, Project, Store};
 use crate::workflow::{choice, index, string, text};
-use crate::{rebar, workflow};
+use crate::{manage, rebar, workflow};
 use ocs_plugin_api::dialog::{
-    DialogControl as C, DialogValue as V, HorizontalAlign, PanelDef, PanelStyle, TextStyle,
+    DialogControl as C, DialogDef, DialogResponse, DialogValue as V, HorizontalAlign, PanelDef,
+    PanelStyle, TextStyle,
 };
 use ocs_plugin_api::host::HostApi;
 use std::collections::{BTreeMap, HashMap};
@@ -11,7 +12,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-const SETTINGS: &str = "metraj_ayar_panel";
+pub(crate) const SETTINGS: &str = "metraj_ayar_panel";
 pub(crate) const ITEMS: &str = "metraj_panel";
 pub(crate) const REBAR: &str = "metraj_demir_panel";
 const PAGE_SIZE: usize = 10;
@@ -58,6 +59,7 @@ struct State {
     last_click: Option<(usize, u64, Instant)>,
     item_layout: Option<PanelDef>,
     settings_project: Option<String>,
+    rebar_mode: Option<(String, usize)>,
     project_options: Vec<String>,
     group_options: Vec<String>,
 }
@@ -141,10 +143,12 @@ pub(crate) fn rename_group(old: &str, new: String) {
     }
 }
 
-fn panel(id: &str, title: &str, controls: Vec<C>) -> PanelDef {
+fn panel(id: &str, title: &str, command: &str, controls: Vec<C>) -> PanelDef {
     PanelDef {
         controls,
-        ..PanelDef::new(id, title).with_style(PanelStyle::Palette)
+        ..PanelDef::new(id, title)
+            .with_command(command)
+            .with_style(PanelStyle::Palette)
     }
 }
 
@@ -248,22 +252,22 @@ fn settings_panel() -> PanelDef {
     let mut controls = vec![
         label("context"),
         choices("project", "Proje", &["Proje seçin"]),
-        text("new_project", "Yeni proje adı", ""),
         C::row(vec![
             button("select_project", "Projeyi Seç", "METRAJ_PROJE_SEC"),
-            button("create_project", "Proje Oluştur", "METRAJ_PROJE"),
+            button("create_project", "Proje Oluştur…", "METRAJ_PROJE"),
+            button("delete_project", "Projeyi Sil…", "METRAJ_PROJE_SIL"),
         ]),
         choices("group", "Grup", &["Grup seçin"]),
-        text("new_group", "Yeni grup adı", ""),
         C::row(vec![
-            button("select_group", "Grubu Etkinleştir", "METRAJ_GRUP_SEC"),
-            button("create_group", "Grup Oluştur", "METRAJ_GRUP"),
+            button("select_group", "Grubu Seç", "METRAJ_GRUP_SEC"),
+            button("create_group", "Grup Oluştur…", "METRAJ_GRUP"),
+            button("delete_group", "Grubu Sil…", "METRAJ_GRUP_SIL"),
         ]),
         C::row(vec![
-            button("manage", "Proje / Grup Yönetimi", "METRAJ_DUZENLE"),
+            button("manage", "Ad Değiştir…", "METRAJ_DUZENLE"),
             button("import", "SQLite'tan Aktar", "METRAJ_AKTAR"),
         ]),
-        heading("Demir eşleştirme"),
+        heading("Demir ayarları"),
     ];
     controls.extend(rebar::settings_controls(&Default::default()));
     controls.extend([
@@ -273,22 +277,22 @@ fn settings_panel() -> PanelDef {
             button("open_rebar", "Demir Metrajına Git", "METRAJ_DEMIR_PANEL"),
         ]),
     ]);
-    panel(SETTINGS, "Metraj Ayarları", controls).with_width(320.0)
+    panel(SETTINGS, "Metraj Ayarları", "METRAJ_AYARLAR", controls).with_width(320.0)
 }
 
 fn items_panel(controls: Vec<C>) -> PanelDef {
-    panel(ITEMS, "Metraj", controls)
+    panel(ITEMS, "Metraj", "METRAJ", controls)
 }
 
 fn rebar_panel() -> PanelDef {
     panel(
         REBAR,
         "Demir Metrajı",
+        "METRAJ_DEMIR_PANEL",
         vec![
             label("context"),
-            label("mode_status"),
             text("multiplier", "Adet çarpanı", "1"),
-            choices("sign", "İşlem", &["Metraj", "Minha"]),
+            choices("mode", "Eşleştirme modu", rebar::MODES),
             C::row(vec![
                 button("capture", "Çizimden Demir Al", "METRAJ_DEMIR"),
                 button("manual", "Manuel Giriş…", "METRAJ_DEMIR_MANUEL"),
@@ -381,16 +385,11 @@ fn refresh_settings(
         updates.extend(rebar::settings_values(
             project.map_or(&defaults, |p| &p.settings),
         ));
-        updates.insert("new_group".into(), V::Text(String::new()));
     }
     s.settings_project = current_project;
     for id in [
         "manage",
-        "group",
-        "select_group",
-        "new_group",
         "create_group",
-        "mode",
         "symbols",
         "tolerance",
         "mixed",
@@ -401,10 +400,18 @@ fn refresh_settings(
     ] {
         updates.insert(format!("{id}:enabled"), V::Enabled(project.is_some()));
     }
-    updates.insert(
-        "select_project".into(),
-        V::Enabled(!store.projects.is_empty()),
-    );
+    for id in ["select_project", "delete_project"] {
+        updates.insert(
+            format!("{id}:enabled"),
+            V::Enabled(!store.projects.is_empty()),
+        );
+    }
+    for id in ["group", "select_group", "delete_group"] {
+        updates.insert(
+            format!("{id}:enabled"),
+            V::Enabled(s.group_options.len() > 1),
+        );
+    }
     host.update_panel(SETTINGS, updates);
 }
 
@@ -588,17 +595,19 @@ fn refresh_rebar(
     project: Option<&Project>,
     group: Option<&Group>,
 ) {
-    let mut updates = HashMap::from([
-        ("context".into(), V::Text(context(project, group))),
-        (
-            "mode_status".into(),
-            V::Text(
-                project
-                    .map(|p| format!("Eşleştirme: {}", rebar::mode_label(p.settings.mode)))
-                    .unwrap_or_default(),
+    let mut updates = HashMap::from([("context".into(), V::Text(context(project, group)))]);
+    let mode = project.map(|p| (p.name.clone(), p.settings.mode));
+    if s.rebar_mode != mode {
+        updates.insert(
+            "mode".into(),
+            dropdown(
+                rebar::MODES.iter().map(|mode| (*mode).into()).collect(),
+                mode.as_ref()
+                    .map_or(0, |(_, index)| (*index).min(rebar::MODES.len() - 1)),
             ),
-        ),
-    ]);
+        );
+        s.rebar_mode = mode;
+    }
     let records = group.map_or(&[][..], |g| &g.rebar);
     let mut by_diameter = BTreeMap::<u32, (f64, f64)>::new();
     for r in records {
@@ -646,7 +655,7 @@ fn refresh_rebar(
             })
             .collect(),
     );
-    for id in ["capture", "manual", "multiplier", "sign"] {
+    for id in ["capture", "manual", "multiplier", "mode"] {
         updates.insert(format!("{id}:enabled"), V::Enabled(group.is_some()));
     }
     updates.insert("by_diameter:enabled".into(), V::Enabled(false));
@@ -712,12 +721,16 @@ pub(crate) fn require_current(host: &mut dyn HostApi, store: &Store) -> Result<(
 
 fn reset_for_external_change(host: &mut dyn HostApi, store: &Store) -> Result<(), String> {
     close_item();
-    state().settings_project = None;
+    {
+        let mut s = state();
+        s.settings_project = None;
+        s.rebar_mode = None;
+    }
     refresh(host, store)
 }
 
 fn select_project(store: &Store, values: &HashMap<String, V>) -> Result<(), String> {
-    let p = selection(values, "project", &store.projects, |p| &p.name)?;
+    let p = &store.projects[selected_index(values, "project", &store.projects, |p| &p.name)?];
     let mut s = state();
     if s.target.project.as_deref() != Some(p.name.as_str()) {
         s.select(Some(p.name.clone()), None);
@@ -738,33 +751,46 @@ fn project_for_group(store: &Store, values: &HashMap<String, V>) -> Result<usize
 fn select_group(store: &Store, values: &HashMap<String, V>) -> Result<(), String> {
     let p = project_for_group(store, values)?;
     let project = &store.projects[p];
-    let g = selection(values, "group", &project.groups, |g| &g.name)?;
+    let g = &project.groups[selected_index(values, "group", &project.groups, |g| &g.name)?];
     state().select(Some(project.name.clone()), Some(g.name.clone()));
     Ok(())
 }
 
-fn selection<'a, T>(
+fn selected_index<T>(
     values: &HashMap<String, V>,
     id: &str,
-    list: &'a [T],
+    list: &[T],
     name: impl Fn(&T) -> &str,
-) -> Result<&'a T, String> {
+) -> Result<usize, String> {
     let Some(V::Choice { index, text }) = values.get(id) else {
         return Err("Listeden bir seçim yapın.".into());
     };
     index
         .checked_sub(1)
-        .and_then(|i| list.get(i))
-        .filter(|item| name(item) == text)
+        .filter(|&i| list.get(i).is_some_and(|item| name(item) == text))
         .ok_or_else(|| "Listeden bir seçim yapın.".into())
 }
 
-fn create_project(
+fn creation_name(
     host: &mut dyn HostApi,
-    store: &mut Store,
-    values: &HashMap<String, V>,
-) -> Result<(), String> {
-    let name = string(values, "new_project")?;
+    title: &str,
+    label: &str,
+) -> Result<Option<String>, String> {
+    let dialog = DialogDef::new(title)
+        .width(320.0)
+        .with_control(text("name", label, ""))
+        .submit_label("Oluştur")
+        .cancel_label("Vazgeç");
+    match host.show_dialog(dialog) {
+        DialogResponse::Cancelled => Ok(None),
+        DialogResponse::Submitted(values) => string(&values, "name").map(Some),
+    }
+}
+
+pub(crate) fn create_project(host: &mut dyn HostApi, store: &mut Store) -> Result<(), String> {
+    let Some(name) = creation_name(host, "Yeni Proje", "Proje adı")? else {
+        return Ok(());
+    };
     if name.is_empty() {
         return Err("Proje adı boş olamaz.".into());
     }
@@ -783,20 +809,14 @@ fn create_project(
     store.save()?;
     host.push_info(&format!("Proje oluşturuldu: {name}"));
     state().select(Some(name), None);
-    host.update_panel(
-        SETTINGS,
-        [("new_project".into(), V::Text(String::new()))].into(),
-    );
     Ok(())
 }
 
-fn create_group(
-    host: &mut dyn HostApi,
-    store: &mut Store,
-    values: &HashMap<String, V>,
-) -> Result<(), String> {
-    let p = project_for_group(store, values)?;
-    let name = string(values, "new_group")?;
+pub(crate) fn create_group(host: &mut dyn HostApi, store: &mut Store) -> Result<(), String> {
+    let p = project_for_group(store, &read_panel(host, SETTINGS)?)?;
+    let Some(name) = creation_name(host, "Yeni Grup", "Grup adı")? else {
+        return Ok(());
+    };
     if name.is_empty() {
         return Err("Grup adı boş olamaz.".into());
     }
@@ -816,10 +836,41 @@ fn create_group(
     store.save()?;
     host.push_info(&format!("Grup oluşturuldu ve etkinleştirildi: {name}"));
     state().select(Some(store.projects[p].name.clone()), Some(name));
-    host.update_panel(
-        SETTINGS,
-        [("new_group".into(), V::Text(String::new()))].into(),
-    );
+    Ok(())
+}
+
+pub(crate) fn delete_project(host: &mut dyn HostApi, store: &mut Store) -> Result<(), String> {
+    let values = read_panel(host, SETTINGS)?;
+    let p = selected_index(&values, "project", &store.projects, |p| &p.name)?;
+    let name = store.projects[p].name.clone();
+    if manage::confirm(
+        host,
+        &format!("“{name}” projesi ve tüm metraj kayıtları silinsin mi?"),
+    ) {
+        store.projects.remove(p);
+        store.save()?;
+        host.push_info(&format!("Proje silindi: {name}"));
+    }
+    Ok(())
+}
+
+pub(crate) fn delete_group(host: &mut dyn HostApi, store: &mut Store) -> Result<(), String> {
+    let values = read_panel(host, SETTINGS)?;
+    let p = project_for_group(store, &values)?;
+    let project = &mut store.projects[p];
+    let g = selected_index(&values, "group", &project.groups, |g| &g.name)?;
+    let name = project.groups[g].name.clone();
+    if manage::confirm(
+        host,
+        &format!(
+            "“{} / {name}” grubu ve tüm metraj kayıtları silinsin mi?",
+            project.name
+        ),
+    ) {
+        project.groups.remove(g);
+        store.save()?;
+        host.push_info(&format!("Grup silindi: {name}"));
+    }
     Ok(())
 }
 
@@ -908,8 +959,7 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
     let panel = match verb {
         "METRAJ" | "METRAJ_KALEM" | "METRAJ_KALEM_YENI" | "METRAJ_KALEM_LISTE"
         | "METRAJ_KALEM_TIKLA" | "METRAJ_KALEM_AC" | "METRAJ_OLC" => ITEMS,
-        "METRAJ_AYARLAR" | "METRAJ_PROJE" | "METRAJ_PROJE_SEC" | "METRAJ_GRUP"
-        | "METRAJ_GRUP_SEC" | "METRAJ_AYAR" => SETTINGS,
+        "METRAJ_AYARLAR" | "METRAJ_PROJE_SEC" | "METRAJ_GRUP_SEC" | "METRAJ_AYAR" => SETTINGS,
         "METRAJ_DEMIR_PANEL" | "METRAJ_DEMIR" => REBAR,
         "METRAJ_SAYFA" if args.clone().next() == Some("DEMIR") => REBAR,
         "METRAJ_SAYFA" => ITEMS,
@@ -936,14 +986,6 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
         match verb {
             "METRAJ_PROJE_SEC" => select_project(&store, &read_panel(host, SETTINGS)?)?,
             "METRAJ_GRUP_SEC" => select_group(&store, &read_panel(host, SETTINGS)?)?,
-            "METRAJ_PROJE" => {
-                let values = read_panel(host, SETTINGS)?;
-                create_project(host, &mut store, &values)?;
-            }
-            "METRAJ_GRUP" => {
-                let values = read_panel(host, SETTINGS)?;
-                create_group(host, &mut store, &values)?;
-            }
             "METRAJ_AYAR" => {
                 let p = active_project(&store)?;
                 rebar::save_settings(&mut store, p, &read_panel(host, SETTINGS)?)?;
@@ -951,7 +993,7 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
                     SETTINGS,
                     rebar::settings_values(&store.projects[p].settings),
                 );
-                host.push_info("Demir eşleştirme ayarları kaydedildi.");
+                host.push_info("Demir ayarları kaydedildi.");
             }
             "METRAJ_KALEM_YENI" => {
                 active_group(&store)?;

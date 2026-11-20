@@ -16,7 +16,7 @@ use store::Store;
 static MANIFEST: PluginManifest = PluginManifest {
     id: "metraj.opencad",
     name: "Metraj",
-    version: "0.2.4",
+    version: "0.2.5",
     description: "Proje, kalem ve demir metrajı çalışma panelleri",
     api_version: ApiVersion::CURRENT,
     ribbon_order: 55,
@@ -38,16 +38,28 @@ impl CadModule for MetrajModule {
             vec![RibbonGroup {
                 title: "Metraj",
                 tools: [
-                    ("METRAJ_AYARLAR", "Metraj Ayarları", "⚙"),
-                    ("METRAJ", "Metraj", "▤"),
-                    ("METRAJ_DEMIR_PANEL", "Demir Metrajı", "Ø"),
+                    (
+                        "METRAJ_AYARLAR",
+                        "Metraj Ayarları",
+                        IconKind::Svg(include_bytes!("../../../assets/icons/32/properties.svg")),
+                    ),
+                    (
+                        "METRAJ",
+                        "Metraj",
+                        IconKind::Svg(include_bytes!("../../../assets/icons/32/measure.svg")),
+                    ),
+                    (
+                        "METRAJ_DEMIR_PANEL",
+                        "Demir Metrajı",
+                        IconKind::Svg(include_bytes!("../../../assets/icons/32/dim_diameter.svg")),
+                    ),
                 ]
                 .into_iter()
                 .map(|(id, label, icon)| {
                     RibbonItem::LargeTool(ToolDef {
                         id,
                         label,
-                        icon: IconKind::Glyph(icon),
+                        icon,
                         event: ModuleEvent::Command(id.to_owned()),
                     })
                 })
@@ -83,6 +95,10 @@ impl BuiltinPlugin for MetrajPlugin {
             verb,
             "METRAJ_AKTAR"
                 | "METRAJ_DUZENLE"
+                | "METRAJ_PROJE"
+                | "METRAJ_PROJE_SIL"
+                | "METRAJ_GRUP"
+                | "METRAJ_GRUP_SIL"
                 | "METRAJ_KALEM_DUZENLE"
                 | "METRAJ_KALEM_SIL"
                 | "METRAJ_KAYIT_SIL"
@@ -103,7 +119,11 @@ impl BuiltinPlugin for MetrajPlugin {
 fn execute(host: &mut dyn HostApi, command: &str, store: &mut Store) -> Result<(), String> {
     match command {
         "METRAJ_AKTAR" => import::run(host, store),
-        "METRAJ_DUZENLE" => manage::edit(host, store),
+        "METRAJ_DUZENLE" => manage::rename(host, store),
+        "METRAJ_PROJE" => panels::create_project(host, store),
+        "METRAJ_PROJE_SIL" => panels::delete_project(host, store),
+        "METRAJ_GRUP" => panels::create_group(host, store),
+        "METRAJ_GRUP_SIL" => panels::delete_group(host, store),
         "METRAJ_KALEM_DUZENLE" => manage::edit_item(host, store),
         "METRAJ_KALEM_SIL" => manage::delete_item(host, store),
         "METRAJ_KAYIT_SIL" => manage::delete_record(host, store, false),

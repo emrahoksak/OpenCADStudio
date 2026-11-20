@@ -4,9 +4,9 @@ Bir çizim açıp şeritteki **Metraj** sekmesine geçin. Eklentinin üç paneli
 
 ## Metraj Ayarları
 
-**Metraj Ayarları** (`METRAJ_AYARLAR`) panelinden proje ve grup oluşturun. Yeni proje seçilir ve eklenen grup etkinleştirilir. Mevcut bir projeyle çalışmak için listeden projeyi seçip **Projeyi Seç** düğmesine basın. Ardından çalışma grubunu seçip **Grubu Etkinleştir** düğmesine basın.
+**Metraj Ayarları** (`METRAJ_AYARLAR`) panelinden proje ve grup oluşturun. Oluşturma düğmeleri ad girişi için bir pencere açar. Yeni proje seçilir ve eklenen grup etkinleştirilir. Silme düğmeleri listede seçili projeyi veya grubu, onaydan sonra kayıtlarıyla birlikte kaldırır. Mevcut bir projeyle çalışmak için listeden projeyi seçip **Projeyi Seç** düğmesine basın. Ardından çalışma grubunu seçip **Grubu Seç** düğmesine basın.
 
-Demir ayarları seçili projeye kaydedilir. Mod1, Mod2, Mod2++, yatay, düşey veya adetsiz eşleştirme modunu, çap sembollerini ve toleransı belirleyin. Tek renk için bir hazır renk veya `#RRGGBB` değerini seçin. Karma renk kullanıldığında her eşleşme ayrı renkle işaretlenir. Çerçeve seçeneği, her eşleşmenin metin sınırlarını kapsayan eksenlere paralel dikdörtgeni çizer.
+Demir ayarları seçili projeye kaydedilir. Çap sembollerini ve toleransı belirleyin. Tek renk için bir hazır renk veya `#RRGGBB` değerini seçin. Karma renk kullanıldığında her eşleşme ayrı renkle işaretlenir. Çerçeve seçeneği, her eşleşmenin metin sınırlarını kapsayan eksenlere paralel dikdörtgeni çizer.
 
 **SQLite'tan Aktar** düğmesi eski Metraj veritabanındaki projeleri salt okunur dosyadan aktarır. Grup bilgisi bulunmayan eski kayıtlar **Grupsuz eski kayıtlar** grubuna alınır.
 
@@ -20,7 +20,7 @@ Kalem listesindeki **Excel'e Aktar** düğmesi etkin grubun icmalini ve detaylar
 
 ## Demir Metrajı
 
-**Demir Metrajı** (`METRAJ_DEMIR_PANEL`) panelinde **Çizimden Demir Al** düğmesine basın. Önceden seçili yazılar doğrudan işlenir. Seçim yoksa çizimde TEXT ve MTEXT yazılarını seçip Enter’a basın. Adet çarpanını ve metraj veya minha işlemini panelden belirleyin. **Manuel Giriş** düğmesiyle adet, çap ve birim boy penceresini açın. Panel, grubun kayıtlarını, çap bazında net boy ve ağırlığını, toplam kg ve ton değerlerini gösterir.
+**Demir Metrajı** (`METRAJ_DEMIR_PANEL`) panelinde **Çizimden Demir Al** düğmesine basın. Önceden seçili yazılar doğrudan işlenir. Seçim yoksa çizimde TEXT ve MTEXT yazılarını seçip Enter’a basın. Adet çarpanını ve eşleştirme modunu panelden belirleyin. Son başarılı ölçümün modu projeye kaydedilir. **Manuel Giriş** düğmesiyle adet, çap ve birim boy penceresini açın. Panel, grubun kayıtlarını, çap bazında net boy ve ağırlığını, toplam kg ve ton değerlerini gösterir.
 
 Yalnızca metraj kaydına giren nesneler ve eşleşen yazılar `HESAPLANDI` katmanına taşınır. Çizim işaretleri CAD geri alma komutuyla, ölçüm satırları paneldeki **Kaydı Sil** işlemiyle yönetilir. Çerçeve ölçüleri yazı tipi ve dönüşe bağlı olarak yaklaşık olabilir.
 

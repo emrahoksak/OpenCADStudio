@@ -13,7 +13,7 @@ use iced::{Background, Border, Color, Element, Fill, Length, Theme};
 /// title the plugin authored (a `PanelId::Plugin(_)` literal is not a title).
 pub(in crate::app) enum MenuPanel {
     Builtin(crate::ui::dock::PanelId),
-    Plugin(u32, String),
+    Plugin(u32, String, &'static [u8]),
 }
 
 impl MenuPanel {
@@ -21,7 +21,7 @@ impl MenuPanel {
     fn id(&self) -> crate::ui::dock::PanelId {
         match self {
             MenuPanel::Builtin(id) => *id,
-            MenuPanel::Plugin(num, _) => crate::ui::dock::PanelId::Plugin(*num),
+            MenuPanel::Plugin(num, ..) => crate::ui::dock::PanelId::Plugin(*num),
         }
     }
 
@@ -29,17 +29,34 @@ impl MenuPanel {
     pub(super) fn title(&self) -> String {
         match self {
             MenuPanel::Builtin(id) => t!(id.title()).into_owned(),
-            MenuPanel::Plugin(_, title) => title.clone(),
+            MenuPanel::Plugin(_, title, _) => title.clone(),
         }
     }
 
-    /// The generic plugin icon; built-ins keep their own.
     fn icon(&self) -> &'static [u8] {
-        self.id().icon()
+        match self {
+            MenuPanel::Builtin(id) => id.icon(),
+            MenuPanel::Plugin(_, _, svg) => svg,
+        }
     }
 }
 
 impl OpenCADStudio {
+    fn dock_panel_icon(&self, id: crate::ui::dock::PanelId) -> &'static [u8] {
+        if let crate::ui::dock::PanelId::Plugin(num) = id {
+            let svg = self
+                .plugin_panel_by_num
+                .get(&num)
+                .and_then(|panel_id| self.plugin_panels.get(panel_id))
+                .and_then(|panel| panel.def.command.as_deref())
+                .and_then(|command| self.ribbon.command_svg(command));
+            if let Some(svg) = svg {
+                return svg;
+            }
+        }
+        id.icon()
+    }
+
     /// Everything the dock draws over the workspace (the row of edges and
     /// viewport): floating pallets, an open + menu, the drag preview, and
     /// the pointer capture that feeds drags.
@@ -261,7 +278,10 @@ impl OpenCADStudio {
         entries.extend(
             plugins
                 .into_iter()
-                .map(|(num, title, visible)| (MenuPanel::Plugin(num, title), visible)),
+                .map(|(num, title, visible)| {
+                    let icon = self.dock_panel_icon(PanelId::Plugin(num));
+                    (MenuPanel::Plugin(num, title, icon), visible)
+                }),
         );
         entries
     }
@@ -424,7 +444,7 @@ impl OpenCADStudio {
                     || (dragging
                         && movement
                             .is_some_and(|(panel, group, _)| group.is_none() && panel == id));
-                let art = id.icon();
+                let art = self.dock_panel_icon(id);
                 let tint: fn(&Theme) -> Color = if is_open {
                     chrome::strong
                 } else {
@@ -815,7 +835,13 @@ impl OpenCADStudio {
             hidden,
         } = self.dock_float_frame(f);
         let hovered = self.dock_title_hover == Some(f.id);
-        let bar = floating_title_bar(f.id, self.dock.auto_collapse(f.id), bar_left, hovered);
+        let bar = floating_title_bar(
+            f.id,
+            self.dock_panel_icon(f.id),
+            self.dock.auto_collapse(f.id),
+            bar_left,
+            hovered,
+        );
         let content: Element<'_, Message> = if hidden {
             bar
         } else {
@@ -1016,7 +1042,8 @@ impl OpenCADStudio {
                     Some((s, g)) => self.dock_group_visible(s, g),
                     None => vec![id],
                 };
-                layers.push(place_at(dock_icon_ghost(&icons), p.x - 16.0, p.y - 15.0));
+                let icons = icons.into_iter().map(|panel| self.dock_panel_icon(panel));
+                layers.push(place_at(dock_icon_ghost(icons), p.x - 16.0, p.y - 15.0));
             }
         }
         iced::widget::Stack::with_children(layers)
@@ -1169,11 +1196,10 @@ fn dock_insert_line() -> Element<'static, Message> {
 
 /// The ghost following the pointer while pallets are dragged: their icons
 /// in an accent-framed box.
-fn dock_icon_ghost(icons: &[crate::ui::dock::PanelId]) -> Element<'static, Message> {
+fn dock_icon_ghost(icons: impl Iterator<Item = &'static [u8]>) -> Element<'static, Message> {
     let glyphs: Vec<Element<'static, Message>> = icons
-        .iter()
-        .map(|id| {
-            container(crate::ui::icons::themed(id.icon(), 18.0))
+        .map(|icon| {
+            container(crate::ui::icons::themed(icon, 18.0))
                 .center_x(Length::Fixed(32.0))
                 .center_y(Length::Fixed(30.0))
                 .into()
@@ -1231,6 +1257,7 @@ impl FloatFrame {
 /// upward above it. Pressing the bar's free area drags the panel.
 fn floating_title_bar(
     id: crate::ui::dock::PanelId,
+    icon: &'static [u8],
     auto_collapse: bool,
     on_left: bool,
     hovered: bool,
@@ -1271,7 +1298,7 @@ fn floating_title_bar(
         )
         .push(
             container(crate::ui::icons::tinted(
-                id.icon(),
+                icon,
                 km::FLOAT_ICON,
                 chrome::title_text,
             ))

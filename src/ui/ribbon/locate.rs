@@ -217,6 +217,30 @@ impl Ribbon {
         })
     }
 
+    /// SVG for a direct ribbon command used by a dockable panel.
+    pub(crate) fn command_svg(&self, command: &str) -> Option<&'static [u8]> {
+        self.modules
+            .iter()
+            .flat_map(|module| module.ribbon_groups())
+            .flat_map(|group| &group.tools)
+            .find_map(|item| {
+                let tool = match item {
+                    RibbonItem::Tool(tool)
+                    | RibbonItem::LabeledTool(tool)
+                    | RibbonItem::LargeTool(tool) => tool,
+                    _ => return None,
+                };
+                match (&tool.event, tool.icon) {
+                    (ModuleEvent::Command(id), IconKind::Svg(svg))
+                        if id.eq_ignore_ascii_case(command) =>
+                    {
+                        Some(svg)
+                    }
+                    _ => None,
+                }
+            })
+    }
+
     /// The button id that runs the command line `cmd`: an exact match first,
     /// then a button that runs its bare verb (`OFFSET 5` → Offset).
     pub(super) fn tool_for_command(&self, cmd: &str) -> Option<&'static str> {
