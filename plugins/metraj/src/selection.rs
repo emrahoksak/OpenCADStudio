@@ -3,7 +3,7 @@ use crate::panels::{self, Target};
 use crate::store::Store;
 use crate::{rebar, workflow};
 use ocs_plugin_api::host::{CommandStep, EntityType, Handle, HostApi, InteractiveCommand};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::HashSet;
 use std::sync::Mutex;
 
 pub(crate) enum Measurement {
@@ -19,6 +19,13 @@ impl Measurement {
         }
     }
 
+    fn command(&self) -> &'static str {
+        match self {
+            Self::Item(_) => "METRAJ_OLC",
+            Self::Rebar(_) => "METRAJ_DEMIR",
+        }
+    }
+
     fn objects(&self) -> &'static str {
         match self {
             Self::Item(_) => "ölçülecek nesneleri",
@@ -28,7 +35,6 @@ impl Measurement {
 }
 
 struct Request {
-    id: u64,
     tab: u64,
     revision: u64,
     target: Target,
@@ -86,12 +92,14 @@ impl InteractiveCommand for Gather {
         let Some(request) = self.request.take() else {
             return CommandStep::Cancel;
         };
-        let id = request.id;
+        // The host remembers dispatched commands for Space/Enter repeat.
+        // Resume through the public command so a later repeat starts fresh.
+        let command = request.measurement.command();
         *READY.lock().unwrap() = Some(Ready {
             request,
             handles: std::mem::take(&mut self.handles),
         });
-        CommandStep::Dispatch(format!("METRAJ_SECIM_TAMAMLA {id}"))
+        CommandStep::Dispatch(command.into())
     }
 }
 
@@ -102,12 +110,16 @@ pub(crate) fn start(
 ) -> Result<(), String> {
     let handles = host.selection();
     if !handles.is_empty() {
-        return measure(host, store, measurement, &handles);
+        measure(host, store, measurement, &handles)?;
+        if let Err(error) = host.set_selection(&[]) {
+            host.push_error(&format!(
+                "Ölçüm kaydedildi ancak seçim temizlenemedi. {error}"
+            ));
+        }
+        return Ok(());
     }
 
-    static NEXT: AtomicU64 = AtomicU64::new(1);
     let request = Request {
-        id: NEXT.fetch_add(1, Ordering::Relaxed),
         tab: host.tab_id(),
         revision: store.stamp(),
         target: panels::target_snapshot(),
@@ -123,14 +135,15 @@ pub(crate) fn start(
     Ok(())
 }
 
-pub(crate) fn finish(host: &mut dyn HostApi, id: u64) -> Result<(), String> {
-    let ready = {
-        let mut pending = READY.lock().unwrap();
-        if !pending.as_ref().is_some_and(|ready| ready.request.id == id) {
-            return Err("Metraj seçim oturumu bulunamadı.".into());
-        }
-        pending.take().unwrap()
-    };
+pub(crate) fn finish_pending(host: &mut dyn HostApi, command: &str) -> Option<Result<(), String>> {
+    let ready = READY
+        .lock()
+        .unwrap()
+        .take_if(|ready| ready.request.measurement.command() == command)?;
+    Some(finish(host, ready))
+}
+
+fn finish(host: &mut dyn HostApi, ready: Ready) -> Result<(), String> {
     let mut store = Store::load()?;
     if host.tab_id() != ready.request.tab {
         return Err("Çizim sekmesi değişti. Ölçümü yeniden başlatın.".into());
@@ -196,13 +209,20 @@ pub(crate) fn mark_entities(
     host: &mut dyn HostApi,
     label: &str,
     entities: Vec<EntityType>,
+    recorded_handles: impl IntoIterator<Item = u64>,
 ) -> Result<(), String> {
+    // Only handles read back from the saved records may change layer.
+    let recorded: HashSet<_> = recorded_handles.into_iter().collect();
     // Leave room for request framing. One entity can exceed this target
     // budget and is then sent on its own.
     const BATCH_BYTES: u64 = 32 * 1024 * 1024;
     let mut batch = Vec::new();
     let mut bytes = 0u64;
-    for entity in entities {
+    for mut entity in entities {
+        if !recorded.contains(&entity.common().handle.value()) {
+            continue;
+        }
+        entity.common_mut().layer = "HESAPLANDI".into();
         let size = bincode::serialized_size(&entity).map_err(|error| error.to_string())?;
         if !batch.is_empty() && bytes.saturating_add(size) > BATCH_BYTES {
             host.update_entities_transaction(label, std::mem::take(&mut batch))?;

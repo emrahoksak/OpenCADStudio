@@ -209,7 +209,7 @@ pub fn measure(
     host: &mut dyn HostApi,
     s: &mut Store,
     options: MeasureOptions,
-    mut entities: Vec<EntityType>,
+    entities: Vec<EntityType>,
 ) -> Result<(), String> {
     let (p, g) = crate::panels::active_group(s)?;
     let i = crate::panels::active_item(&s.projects[p].groups[g])?;
@@ -225,8 +225,9 @@ pub fn measure(
     let mut sum = 0.0;
     let mut handles = Vec::with_capacity(entities.len());
     let mut layers = Vec::with_capacity(entities.len());
-    for entity in &entities {
-        let value = match entity {
+    let mut measured = Vec::with_capacity(entities.len());
+    for mut entity in entities {
+        let value = match &entity {
             EntityType::Line(line) if !area => line.length() * factor,
             EntityType::Arc(arc) if !area => arc.arc_length() * factor,
             EntityType::Circle(circle) if area => circle.area() * factor * factor,
@@ -257,29 +258,39 @@ pub fn measure(
                 ));
             }
         };
+        if !value.is_finite() || value < 0.0 {
+            return Err(format!(
+                "{:X} numaralı nesnenin ölçümü geçersiz.",
+                entity.common().handle.value(),
+            ));
+        }
+        if value == 0.0 {
+            continue;
+        }
         sum += value;
         handles.push(entity.common().handle.value());
         layers.push(entity.common().layer.clone());
+        entity.common_mut().color = ocs_plugin_api::host::document::types::Color::ByLayer;
+        measured.push(entity);
     }
     let quantity = sum * height * sign;
     if !quantity.is_finite() || quantity == 0.0 {
         return Err("Ölçüm sonucu sıfır veya geçersiz.".into());
     }
+    let record_index = item.records.len();
     item.records.push(Record {
         method: method.into(),
         quantity,
-        source: format!("{} nesne", entities.len()),
+        source: format!("{} nesne", measured.len()),
         handles,
         original_layers: layers,
     });
     s.save()?;
-    for entity in &mut entities {
-        entity.common_mut().layer = "HESAPLANDI".into();
-        entity.common_mut().color = ocs_plugin_api::host::document::types::Color::ByLayer;
-    }
+    let recorded = &s.projects[p].groups[g].items[i].records[record_index];
     let label = "Metraj nesnelerini işaretle";
     host.begin_undo_group(label);
-    let result = crate::selection::mark_entities(host, label, entities);
+    let result =
+        crate::selection::mark_entities(host, label, measured, recorded.handles.iter().copied());
     host.end_undo_group();
     if let Err(error) = result {
         host.push_error(&format!(

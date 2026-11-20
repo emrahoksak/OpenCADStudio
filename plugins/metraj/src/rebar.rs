@@ -476,8 +476,8 @@ pub fn capture(
     for (ids, q, d, l) in &groups {
         let qty = q.checked_mul(multiplier).ok_or("Adet sınırı aşıldı.")?;
         let weight = qty as f64 * l / 100.0 * (*d as f64).powi(2) / 162.0 * sign;
-        if !weight.is_finite() {
-            return Err("Demir hesabı sayısal sınırı aşıyor.".into());
+        if !weight.is_finite() || weight == 0.0 {
+            return Err("Demir ağırlığı sıfır veya geçersiz.".into());
         }
         rows.push(RebarRow {
             quantity: qty,
@@ -522,7 +522,6 @@ pub fn capture(
         for id in ids {
             let mut entity = texts[*id].entity.clone();
             entity.common_mut().color = color;
-            entity.common_mut().layer = "HESAPLANDI".into();
             if boxes {
                 let b = match &entity {
                     EntityType::Text(t) => t.bounding_box(),
@@ -559,8 +558,11 @@ pub fn capture(
         }
     }
     host.begin_undo_group("Demir metrajı işaretleri");
+    let recorded = store.projects[p].groups[g].rebar[color_offset..]
+        .iter()
+        .flat_map(|row| row.handles.iter().copied());
     if let Err(error) =
-        crate::selection::mark_entities(host, "Metraj eşleşmelerini renklendir", updates)
+        crate::selection::mark_entities(host, "Metraj eşleşmelerini renklendir", updates, recorded)
     {
         host.push_error(&format!(
             "Demir metrajı kaydedildi ancak renklendirme tamamlanamadı. {error}"

@@ -913,16 +913,13 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
         "METRAJ_DEMIR_PANEL" | "METRAJ_DEMIR" => REBAR,
         "METRAJ_SAYFA" if args.clone().next() == Some("DEMIR") => REBAR,
         "METRAJ_SAYFA" => ITEMS,
-        "METRAJ_SECIM_TAMAMLA" => {
-            return Some(
-                args.next()
-                    .and_then(|id| id.parse::<u64>().ok())
-                    .ok_or_else(|| "Metraj seçimi bulunamadı.".into())
-                    .and_then(|id| selection::finish(host, id)),
-            );
-        }
         _ => return None,
     };
+    if matches!(command, "METRAJ_OLC" | "METRAJ_DEMIR") {
+        if let Some(result) = selection::finish_pending(host, command) {
+            return Some(result);
+        }
+    }
     Some((|| {
         let mut store = Store::load()?;
         let opening = matches!(verb, "METRAJ" | "METRAJ_AYARLAR" | "METRAJ_DEMIR_PANEL");
