@@ -4,26 +4,43 @@ use crate::workflow::{choice, index, number, string, text, values, UNITS};
 use ocs_plugin_api::dialog::{DialogControl as C, DialogDef, DialogResponse, DialogValue as V};
 use ocs_plugin_api::host::HostApi;
 use rust_xlsxwriter::Workbook;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
-pub fn manual_rebar(
-    host: &mut dyn HostApi,
-    s: &mut Store,
-    v: &HashMap<String, V>,
-) -> Result<(), String> {
+pub fn manual_rebar(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
     let (p, g) = active_group(s)?;
-    let quantity = string(v, "quantity")?
+    let default_sign = host
+        .panel_snapshot(crate::panels::REBAR)
+        .ok()
+        .and_then(|panel| index(&panel.values, "sign").ok())
+        .unwrap_or_default();
+    let dialog = DialogDef::new("Manuel Demir Metrajı")
+        .width(320.0)
+        .with_control(text("quantity", "Adet", "1"))
+        .with_control(text("diameter", "Çap (mm)", ""))
+        .with_control(text("length", "Boy (cm)", ""))
+        .with_control(C::Choice {
+            id: "sign".into(),
+            label: "İşlem".into(),
+            options: vec!["Metraj".into(), "Minha".into()],
+            default_index: default_sign,
+        })
+        .submit_label("Kaydet")
+        .cancel_label("Vazgeç");
+    let DialogResponse::Submitted(v) = host.show_dialog(dialog) else {
+        return Ok(());
+    };
+    let quantity = string(&v, "quantity")?
         .parse::<u32>()
         .map_err(|_| "Adet pozitif tam sayı olmalı.")?;
-    let diameter = string(v, "diameter")?
+    let diameter = string(&v, "diameter")?
         .parse::<u32>()
         .map_err(|_| "Çap pozitif tam sayı olmalı.")?;
-    let length_cm = number(v, "length")?;
+    let length_cm = number(&v, "length")?;
     if quantity == 0 || diameter == 0 || length_cm <= 0.0 {
         return Err("Adet, çap ve boy pozitif olmalı.".into());
     }
     let weight_kg = quantity as f64 * length_cm / 100.0 * (diameter as f64).powi(2) / 162.0
-        * if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
+        * if index(&v, "sign")? == 1 { -1.0 } else { 1.0 };
     if !weight_kg.is_finite() {
         return Err("Hesap sayısal sınırı aşıyor.".into());
     }

@@ -113,11 +113,13 @@ pub(crate) fn start(
         target: panels::target_snapshot(),
         measurement,
     };
-    host.start_interactive(Box::new(Gather {
+    let gather = Gather {
         _slot: InteractiveSlot::acquire()?,
         request: Some(request),
         handles: Vec::new(),
-    }));
+    };
+    host.push_info(&gather.prompt());
+    host.start_interactive(Box::new(gather));
     Ok(())
 }
 

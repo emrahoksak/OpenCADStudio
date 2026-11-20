@@ -71,7 +71,9 @@ pub fn run(
         }
         let panel = match command {
             "METRAJ_KAYIT_SIL" => host.panel_snapshot(crate::panels::ITEMS).ok(),
-            "METRAJ_DEMIR_SIL" => host.panel_snapshot(crate::panels::REBAR).ok(),
+            "METRAJ_DEMIR_SIL" | "METRAJ_DEMIR_MANUEL" => {
+                host.panel_snapshot(crate::panels::REBAR).ok()
+            }
             _ => None,
         };
         Session {
@@ -130,6 +132,8 @@ pub fn run(
             | "METRAJ_KALEM_SIL"
             | "METRAJ_KAYIT_SIL"
             | "METRAJ_DEMIR_SIL"
+            | "METRAJ_MANUEL"
+            | "METRAJ_DEMIR_MANUEL"
     ) {
         if let Err(error) = crate::panels::refresh(host, &store) {
             host.push_error(&error);

@@ -38,29 +38,23 @@ pub(crate) fn settings_controls(old: &RebarSettings) -> Vec<C> {
             default_index: old.mode.min(MODES.len() - 1),
         },
         text("symbols", "Çap sembolleri", &old.symbols),
-        text(
-            "tolerance",
-            "Yatay/düşey tolerans",
-            &old.tolerance.to_string(),
-        ),
+        text("tolerance", "Yön toleransı", &old.tolerance.to_string()),
         C::Checkbox {
             id: "mixed".into(),
-            label: "Her eşleşmeye ayrı renk ver".into(),
+            label: "Karma renk".into(),
             default: old.mixed,
         },
-        C::row(vec![
-            choice(
-                "color_preset",
-                "Tek renk",
-                std::iter::once("Özel renk".into())
-                    .chain(COLORS.iter().map(|(name, _)| (*name).into()))
-                    .collect(),
-            ),
-            text("color", "Özel renk (#RRGGBB)", &hex_color(old.color)),
-        ]),
+        choice(
+            "color_preset",
+            "Tek renk",
+            std::iter::once("Özel renk".into())
+                .chain(COLORS.iter().map(|(name, _)| (*name).into()))
+                .collect(),
+        ),
+        text("color", "HEX renk", &hex_color(old.color)),
         C::Checkbox {
             id: "box".into(),
-            label: "Eşleşmelere çerçeve çiz".into(),
+            label: "Çerçeve çiz".into(),
             default: old.bounding_box,
         },
     ]

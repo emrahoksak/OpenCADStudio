@@ -1,7 +1,7 @@
 use crate::selection::{self, Measurement};
 use crate::store::{Group, Item, Project, Store};
 use crate::workflow::{choice, index, string, text};
-use crate::{manage, rebar, workflow};
+use crate::{rebar, workflow};
 use ocs_plugin_api::dialog::{
     DialogControl as C, DialogValue as V, HorizontalAlign, PanelDef, PanelStyle, TextStyle,
 };
@@ -144,7 +144,7 @@ pub(crate) fn rename_group(old: &str, new: String) {
 fn panel(id: &str, title: &str, controls: Vec<C>) -> PanelDef {
     PanelDef {
         controls,
-        ..PanelDef::new(id, title).with_style(PanelStyle::Form)
+        ..PanelDef::new(id, title).with_style(PanelStyle::Palette)
     }
 }
 
@@ -185,7 +185,7 @@ fn styled(text: impl Into<String>, style: TextStyle) -> C {
 }
 
 fn heading(text: &str) -> C {
-    styled(text, TextStyle::Heading)
+    styled(text, TextStyle::Strong)
 }
 
 fn hint(text: &str) -> C {
@@ -239,30 +239,31 @@ fn page_values(updates: &mut HashMap<String, V>, key: &str, page: &mut usize, co
     );
     updates.insert(format!("{key}_prev"), V::Enabled(*page > 0));
     updates.insert(format!("{key}_next"), V::Enabled(*page + 1 < pages));
+    for control in ["prev", "page", "next"] {
+        updates.insert(format!("{key}_{control}:visible"), V::Visible(pages > 1));
+    }
 }
 
 fn settings_panel() -> PanelDef {
     let mut controls = vec![
-        heading("Çalışma alanı"),
         label("context"),
         choices("project", "Proje", &["Proje seçin"]),
-        button("select_project", "Projeyi Seç", "METRAJ_PROJE_SEC"),
+        text("new_project", "Yeni proje adı", ""),
         C::row(vec![
-            text("new_project", "Yeni proje adı", ""),
+            button("select_project", "Projeyi Seç", "METRAJ_PROJE_SEC"),
             button("create_project", "Proje Oluştur", "METRAJ_PROJE"),
         ]),
-        choices("group", "Seçili projenin grubu", &["Grup seçin"]),
-        button("select_group", "Grubu Etkinleştir", "METRAJ_GRUP_SEC"),
+        choices("group", "Grup", &["Grup seçin"]),
+        text("new_group", "Yeni grup adı", ""),
         C::row(vec![
-            text("new_group", "Yeni grup adı", ""),
+            button("select_group", "Grubu Etkinleştir", "METRAJ_GRUP_SEC"),
             button("create_group", "Grup Oluştur", "METRAJ_GRUP"),
         ]),
         C::row(vec![
-            button("manage", "Proje ve Grupları Yönet", "METRAJ_DUZENLE"),
+            button("manage", "Proje / Grup Yönetimi", "METRAJ_DUZENLE"),
             button("import", "SQLite'tan Aktar", "METRAJ_AKTAR"),
         ]),
         heading("Demir eşleştirme"),
-        hint("Ayarlar seçili projenin tüm gruplarında kullanılır."),
     ];
     controls.extend(rebar::settings_controls(&Default::default()));
     controls.extend([
@@ -272,7 +273,7 @@ fn settings_panel() -> PanelDef {
             button("open_rebar", "Demir Metrajına Git", "METRAJ_DEMIR_PANEL"),
         ]),
     ]);
-    panel(SETTINGS, "Metraj Ayarları", controls).with_width(415.0)
+    panel(SETTINGS, "Metraj Ayarları", controls).with_width(320.0)
 }
 
 fn items_panel(controls: Vec<C>) -> PanelDef {
@@ -284,24 +285,14 @@ fn rebar_panel() -> PanelDef {
         REBAR,
         "Demir Metrajı",
         vec![
-            heading("Demir metrajı"),
             label("context"),
             label("mode_status"),
-            button("settings", "Metraj Ayarları", "METRAJ_AYARLAR"),
-            heading("Çizimden al"),
-            hint("Yazıları önceden seçin veya düğmeye bastıktan sonra seçip Enter’a basın."),
+            text("multiplier", "Adet çarpanı", "1"),
+            choices("sign", "İşlem", &["Metraj", "Minha"]),
             C::row(vec![
-                text("multiplier", "Adet çarpanı", "1"),
-                choices("sign", "İşlem", &["Metraj", "Minha"]),
+                button("capture", "Çizimden Demir Al", "METRAJ_DEMIR"),
+                button("manual", "Manuel Giriş…", "METRAJ_DEMIR_MANUEL"),
             ]),
-            button("capture", "Çizimden Demir Al", "METRAJ_DEMIR"),
-            heading("Manuel kayıt"),
-            C::row(vec![
-                text("quantity", "Adet", "1"),
-                text("diameter", "Çap (mm)", ""),
-                text("length", "Boy (cm)", ""),
-            ]),
-            button("manual", "Manuel Demir Ekle", "METRAJ_DEMIR_MANUEL"),
             heading("Grup icmali"),
             label("total"),
             table("by_diameter", &["Çap", "Boy (m)", "Ağırlık (kg)"]),
@@ -311,19 +302,20 @@ fn rebar_panel() -> PanelDef {
                 &["No.", "Çap", "Adet", "Boy (cm)", "kg", "Kaynak"],
             ),
             page_buttons("DEMIR"),
+            choices("delete_record", "Kayıt no.", &["Seçin"]),
             C::row(vec![
-                choices("delete_record", "Kayıt no.", &["Seçin"]),
+                button("settings", "Ayarlar", "METRAJ_AYARLAR"),
                 button("delete", "Kaydı Sil…", "METRAJ_DEMIR_SIL"),
             ]),
         ],
     )
-    .with_width(440.0)
+    .with_width(360.0)
 }
 
 pub(crate) fn initialize(host: &mut dyn HostApi) -> Result<(), String> {
     register(host, settings_panel())?;
     register(host, rebar_panel())?;
-    register(host, items_panel(Vec::new()).with_width(440.0))?;
+    register(host, items_panel(Vec::new()).with_width(330.0))?;
     refresh(host, &Store::load()?)
 }
 
@@ -426,12 +418,10 @@ fn list_controls(
         button("new_item", "Yeni Metraj Kalemi", "METRAJ_KALEM_YENI"),
         button("export", "Excel'e Aktar…", "METRAJ_EXCEL"),
     ]));
-    controls.push(heading("Metraj kalemleri"));
     if group.items.is_empty() {
         controls.push(hint("Bu grupta henüz metraj kalemi yok."));
         return;
     }
-    controls.push(hint("Ölçüm ve kayıtlar için bir kaleme çift tıklayın."));
     page_values(updates, "KALEM", &mut s.item_page, group.items.len());
     let start = s.item_page * PAGE_SIZE;
     for (i, item) in group.items.iter().enumerate().skip(start).take(PAGE_SIZE) {
@@ -471,72 +461,41 @@ fn detail_controls(
     updates: &mut HashMap<String, V>,
 ) {
     controls.extend([
-        button("back", "‹ Metraj Kalemleri", "METRAJ_KALEM_LISTE"),
-        styled(item.name.clone(), TextStyle::Heading),
+        button("back", "‹ Kalemler", "METRAJ_KALEM_LISTE"),
+        styled(item.name.clone(), TextStyle::Strong),
         label("item_metadata"),
-        label("total"),
     ]);
-    let total: f64 = item.records.iter().map(|r| r.quantity).sum();
-    updates.insert(
-        "item_metadata".into(),
-        V::Text(format!(
-            "Poz: {}   |   Birim: {}",
-            if item.poz.is_empty() {
-                "—"
-            } else {
-                &item.poz
-            },
-            item.unit_label(),
-        )),
-    );
-    updates.insert(
-        "total".into(),
-        V::Text(format!(
-            "Net miktar: {total:.4} {}  ·  {} kayıt",
-            item.unit_label(),
-            item.records.len()
-        )),
-    );
+    let unit = item.unit_label();
+    let metadata = if item.poz.is_empty() {
+        unit.to_owned()
+    } else {
+        format!("{} · {unit}", item.poz)
+    };
+    updates.insert("item_metadata".into(), V::Text(metadata));
+
     let modes = workflow::measurement_modes(&item.unit);
+    let mut actions = Vec::new();
     if !modes.is_empty() {
-        controls.extend([
-            heading("Çizimden ölç"),
-            hint("Önceden seçin veya düğmeye bastıktan sonra çizimde seçip Enter’a basın."),
-            C::row(vec![
-                choices("method", "Yöntem", modes),
-                choices("scale", "Çizim birimi", &["cm", "mm", "m"]),
-            ]),
-            C::row(vec![
-                if item.unit == "m" {
-                    hint("Çizgi, polyline, yay veya daire")
-                } else {
-                    text("height", "Yükseklik (m)", "3")
-                },
-                choices("sign", "İşlem", &["Metraj", "Minha"]),
-            ]),
-            button("measure", "Çizimden Metraj Al", "METRAJ_OLC"),
-        ]);
+        if modes.len() > 1 {
+            controls.push(choices("method", "Yöntem", modes));
+        }
+        controls.push(choices("scale", "Çizim birimi", &["cm", "mm", "m"]));
+        if item.unit != "m" {
+            controls.push(text("height", "Yükseklik (m)", "3"));
+        }
+        controls.push(choices("sign", "İşlem", &["Metraj", "Minha"]));
+        actions.push(button("measure", "Çizimden Metraj Al", "METRAJ_OLC"));
     }
+    actions.push(button("manual", "Manuel Giriş…", "METRAJ_MANUEL"));
+
     controls.extend([
-        heading("Manuel kayıt"),
-        C::row(vec![
-            text("quantity", "Miktar (minha için eksi)", ""),
-            text("note", "Açıklama", ""),
-        ]),
-        button("manual", "Manuel Miktarı Ekle", "METRAJ_MANUEL"),
-        heading("Ölçüm kayıtları"),
+        C::row(actions),
         table("records", &["No.", "Yöntem", "Miktar", "Açıklama"]),
         page_buttons("KAYIT"),
+        choices("delete_record", "Kayıt no.", &["Seçin"]),
         C::row(vec![
-            choices("delete_record", "Kayıt no.", &["Seçin"]),
             button("delete", "Kaydı Sil…", "METRAJ_KAYIT_SIL"),
-        ]),
-        C::row(vec![
-            button(
-                "edit_item",
-                "Kalemi Düzenle / Çoğalt…",
-                "METRAJ_KALEM_DUZENLE",
-            ),
+            button("edit_item", "Kalemi Düzenle…", "METRAJ_KALEM_DUZENLE"),
             button("delete_item", "Kalemi Sil…", "METRAJ_KALEM_SIL"),
         ]),
     ]);
@@ -563,7 +522,9 @@ fn record_values(updates: &mut HashMap<String, V>, rows: Vec<Vec<String>>) {
     let mut options = vec!["Seçin".into()];
     options.extend(rows.iter().map(|r| r[0].clone()));
     updates.insert("delete_record".into(), dropdown(options, 0));
-    updates.insert("delete".into(), V::Enabled(!rows.is_empty()));
+    for id in ["delete", "delete_record"] {
+        updates.insert(format!("{id}:visible"), V::Visible(!rows.is_empty()));
+    }
     updates.insert("records:enabled".into(), V::Enabled(false));
     updates.insert("records".into(), V::Table(rows));
 }
@@ -676,15 +637,7 @@ fn refresh_rebar(
             })
             .collect(),
     );
-    for id in [
-        "capture",
-        "manual",
-        "multiplier",
-        "sign",
-        "quantity",
-        "diameter",
-        "length",
-    ] {
+    for id in ["capture", "manual", "multiplier", "sign"] {
         updates.insert(format!("{id}:enabled"), V::Enabled(group.is_some()));
     }
     updates.insert("by_diameter:enabled".into(), V::Enabled(false));
@@ -927,10 +880,10 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
     let verb = args.next()?;
     let panel = match verb {
         "METRAJ" | "METRAJ_KALEM" | "METRAJ_KALEM_YENI" | "METRAJ_KALEM_LISTE"
-        | "METRAJ_KALEM_TIKLA" | "METRAJ_KALEM_AC" | "METRAJ_OLC" | "METRAJ_MANUEL" => ITEMS,
+        | "METRAJ_KALEM_TIKLA" | "METRAJ_KALEM_AC" | "METRAJ_OLC" => ITEMS,
         "METRAJ_AYARLAR" | "METRAJ_PROJE" | "METRAJ_PROJE_SEC" | "METRAJ_GRUP"
         | "METRAJ_GRUP_SEC" | "METRAJ_AYAR" => SETTINGS,
-        "METRAJ_DEMIR_PANEL" | "METRAJ_DEMIR" | "METRAJ_DEMIR_MANUEL" => REBAR,
+        "METRAJ_DEMIR_PANEL" | "METRAJ_DEMIR" => REBAR,
         "METRAJ_SAYFA" if args.clone().next() == Some("DEMIR") => REBAR,
         "METRAJ_SAYFA" => ITEMS,
         "METRAJ_SECIM_TAMAMLA" => {
@@ -995,18 +948,6 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
                 state().item_page = i / PAGE_SIZE;
                 open_item(i);
             }
-            "METRAJ_MANUEL" => {
-                let values = read_panel(host, ITEMS)?;
-                workflow::manual(host, &mut store, &values)?;
-                host.update_panel(
-                    ITEMS,
-                    [
-                        ("quantity".into(), V::Text(String::new())),
-                        ("note".into(), V::Text(String::new())),
-                    ]
-                    .into(),
-                );
-            }
             "METRAJ_OLC" => {
                 let values = read_panel(host, ITEMS)?;
                 let options = workflow::measure_options(&store, &values)?;
@@ -1017,18 +958,6 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
                 active_group(&store)?;
                 let options = rebar::capture_options(&values)?;
                 return selection::start(host, &mut store, Measurement::Rebar(options));
-            }
-            "METRAJ_DEMIR_MANUEL" => {
-                let values = read_panel(host, REBAR)?;
-                manage::manual_rebar(host, &mut store, &values)?;
-                host.update_panel(
-                    REBAR,
-                    [
-                        ("diameter".into(), V::Text(String::new())),
-                        ("length".into(), V::Text(String::new())),
-                    ]
-                    .into(),
-                );
             }
             _ => return Err("Bilinmeyen metraj komutu.".into()),
         }

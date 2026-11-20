@@ -14,13 +14,13 @@ Demir ayarları seçili projeye kaydedilir. Mod1, Mod2, Mod2++, yatay, düşey v
 
 **Metraj** (`METRAJ`) panelinde **Yeni Metraj Kalemi** düğmesiyle ad, poz no ve birim girin. Liste her kalemin net miktarını gösterir. Kaleme çift tıklayın veya yanındaki **Aç** düğmesine basın.
 
-Kalem ekranında çizim birimini ve ölçüm yöntemini seçin. **Çizimden Metraj Al** düğmesine basın. Önceden seçili nesneler doğrudan ölçülür. Seçim yoksa çizimde tek tek veya pencereyle nesne seçip Enter’a basın. Esc işlemi iptal eder. Uzunluk için LINE, LWPOLYLINE, ARC veya CIRCLE, alan için kapalı LWPOLYLINE, CIRCLE veya HATCH kullanılabilir. m² kaleminde uzunluk × yükseklik, m³ kaleminde alan × yükseklik kullanılabilir. **Minha** düşüm kaydeder. Manuel düşüm için eksi miktar girin. Ölçüm kayıtları ve net miktar kalem ekranında görünür.
+Kalem ekranında çizim birimini ve ölçüm yöntemini seçin. **Çizimden Metraj Al** düğmesine basın. Önceden seçili nesneler doğrudan ölçülür. Seçim yoksa çizimde tek tek veya pencereyle nesne seçip Enter’a basın. Esc işlemi iptal eder. Uzunluk için LINE, LWPOLYLINE, ARC veya CIRCLE, alan için kapalı LWPOLYLINE, CIRCLE veya HATCH kullanılabilir. m² kaleminde uzunluk × yükseklik, m³ kaleminde alan × yükseklik kullanılabilir. **Minha** düşüm kaydeder. **Manuel Giriş** düğmesi miktar ve açıklama penceresini açar. Manuel düşüm için eksi miktar girin. Ölçüm kayıtları kalem ekranında görünür.
 
 Kalem listesindeki **Excel'e Aktar** düğmesi etkin grubun icmalini ve detaylarını `.xlsx` olarak kaydeder.
 
 ## Demir Metrajı
 
-**Demir Metrajı** (`METRAJ_DEMIR_PANEL`) panelinde **Çizimden Demir Al** düğmesine basın. Önceden seçili yazılar doğrudan işlenir. Seçim yoksa çizimde TEXT ve MTEXT yazılarını seçip Enter’a basın. Adet çarpanını ve metraj veya minha işlemini panelden belirleyin. Manuel giriş için adet, çap ve birim boy girin. Panel, grubun kayıtlarını, çap bazında net boy ve ağırlığını, toplam kg ve ton değerlerini gösterir.
+**Demir Metrajı** (`METRAJ_DEMIR_PANEL`) panelinde **Çizimden Demir Al** düğmesine basın. Önceden seçili yazılar doğrudan işlenir. Seçim yoksa çizimde TEXT ve MTEXT yazılarını seçip Enter’a basın. Adet çarpanını ve metraj veya minha işlemini panelden belirleyin. **Manuel Giriş** düğmesiyle adet, çap ve birim boy penceresini açın. Panel, grubun kayıtlarını, çap bazında net boy ve ağırlığını, toplam kg ve ton değerlerini gösterir.
 
 Eşleşen metinler ve ölçülen nesneler `HESAPLANDI` katmanına taşınır. Çizim işaretleri CAD geri alma komutuyla, ölçüm satırları paneldeki **Kaydı Sil** işlemiyle yönetilir. Çerçeve ölçüleri yazı tipi ve dönüşe bağlı olarak yaklaşık olabilir.
 

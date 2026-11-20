@@ -82,17 +82,31 @@ pub fn create_item(
     s.save()?;
     Ok(s.projects[p].groups[g].items.len() - 1)
 }
-pub fn manual(host: &mut dyn HostApi, s: &mut Store, v: &HashMap<String, V>) -> Result<(), String> {
+pub fn manual(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
     let (p, g) = crate::panels::active_group(s)?;
     let i = crate::panels::active_item(&s.projects[p].groups[g])?;
-    let q = number(v, "quantity")?;
+    let item = &mut s.projects[p].groups[g].items[i];
+    let dialog = DialogDef::new("Manuel Metraj")
+        .width(320.0)
+        .with_control(text(
+            "quantity",
+            &format!("Miktar ({})", item.unit_label()),
+            "",
+        ))
+        .with_control(text("note", "Açıklama", ""))
+        .submit_label("Kaydet")
+        .cancel_label("Vazgeç");
+    let DialogResponse::Submitted(v) = host.show_dialog(dialog) else {
+        return Ok(());
+    };
+    let q = number(&v, "quantity")?;
     if q == 0.0 {
         return Err("Miktar sıfır olamaz.".into());
     }
-    s.projects[p].groups[g].items[i].records.push(Record {
+    item.records.push(Record {
         method: "Manuel".into(),
         quantity: q,
-        source: string(v, "note")?,
+        source: string(&v, "note")?,
         handles: Vec::new(),
         original_layers: Vec::new(),
     });
@@ -165,7 +179,11 @@ pub(crate) fn measure_options(s: &Store, v: &HashMap<String, V>) -> Result<Measu
     let i = crate::panels::active_item(&s.projects[p].groups[g])?;
     let unit = &s.projects[p].groups[g].items[i].unit;
     let modes = measurement_modes(unit);
-    let method = *modes.get(index(v, "method")?).ok_or("Yöntem bulunamadı.")?;
+    let method = match modes {
+        [] => return Err("Bu kalemde çizimden ölçüm kullanılamaz.".into()),
+        [method] => *method,
+        _ => *modes.get(index(v, "method")?).ok_or("Yöntem bulunamadı.")?,
+    };
     let factor = *[0.01, 0.001, 1.0]
         .get(index(v, "scale")?)
         .ok_or("Birim bulunamadı.")?;

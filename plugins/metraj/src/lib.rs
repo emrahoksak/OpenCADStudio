@@ -16,7 +16,7 @@ use store::Store;
 static MANIFEST: PluginManifest = PluginManifest {
     id: "metraj.opencad",
     name: "Metraj",
-    version: "0.2.1",
+    version: "0.2.2",
     description: "Proje, kalem ve demir metrajı çalışma panelleri",
     api_version: ApiVersion::CURRENT,
     ribbon_order: 55,
@@ -88,6 +88,8 @@ impl BuiltinPlugin for MetrajPlugin {
                 | "METRAJ_KAYIT_SIL"
                 | "METRAJ_DEMIR_SIL"
                 | "METRAJ_EXCEL"
+                | "METRAJ_MANUEL"
+                | "METRAJ_DEMIR_MANUEL"
                 | "METRAJ_ICMAL"
                 | "METRAJ_DEVAM"
         ) {
@@ -107,6 +109,8 @@ fn execute(host: &mut dyn HostApi, command: &str, store: &mut Store) -> Result<(
         "METRAJ_KAYIT_SIL" => manage::delete_record(host, store, false),
         "METRAJ_DEMIR_SIL" => manage::delete_record(host, store, true),
         "METRAJ_EXCEL" => manage::export(host, store),
+        "METRAJ_MANUEL" => workflow::manual(host, store),
+        "METRAJ_DEMIR_MANUEL" => manage::manual_rebar(host, store),
         "METRAJ_ICMAL" => workflow::summary(host, store),
         _ => Err("Bilinmeyen metraj komutu.".into()),
     }
