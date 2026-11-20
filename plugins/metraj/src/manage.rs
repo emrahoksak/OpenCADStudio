@@ -1,39 +1,29 @@
+use crate::panels::{active_group, active_item, active_project};
 use crate::store::{RebarRow, Store};
-use crate::workflow::{choice, index, item_index, number, string, target, text, values};
+use crate::workflow::{choice, index, number, string, text, values, UNITS};
 use ocs_plugin_api::dialog::{DialogControl as C, DialogDef, DialogResponse, DialogValue as V};
 use ocs_plugin_api::host::HostApi;
 use rust_xlsxwriter::Workbook;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-pub fn manual_rebar(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let Some(v) = values(
-        host,
-        "Manuel demir",
-        vec![
-            text("quantity", "Adet", "1"),
-            text("diameter", "Çap (mm)", ""),
-            text("length", "Birim boy (cm)", ""),
-            choice("sign", "İşlem", vec!["Metraj".into(), "Minha".into()]),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let quantity = string(&v, "quantity")?
+pub fn manual_rebar(
+    host: &mut dyn HostApi,
+    s: &mut Store,
+    v: &HashMap<String, V>,
+) -> Result<(), String> {
+    let (p, g) = active_group(s)?;
+    let quantity = string(v, "quantity")?
         .parse::<u32>()
         .map_err(|_| "Adet pozitif tam sayı olmalı.")?;
-    let diameter = string(&v, "diameter")?
+    let diameter = string(v, "diameter")?
         .parse::<u32>()
         .map_err(|_| "Çap pozitif tam sayı olmalı.")?;
-    let length_cm = number(&v, "length")?;
+    let length_cm = number(v, "length")?;
     if quantity == 0 || diameter == 0 || length_cm <= 0.0 {
         return Err("Adet, çap ve boy pozitif olmalı.".into());
     }
     let weight_kg = quantity as f64 * length_cm / 100.0 * (diameter as f64).powi(2) / 162.0
-        * if index(&v, "sign")? == 1 { -1.0 } else { 1.0 };
+        * if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
     if !weight_kg.is_finite() {
         return Err("Hesap sayısal sınırı aşıyor.".into());
     }
@@ -50,94 +40,58 @@ pub fn manual_rebar(host: &mut dyn HostApi) -> Result<(), String> {
     host.push_info("Manuel demir kaydedildi.");
     Ok(())
 }
-pub fn records(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let group = &s.projects[p].groups[g];
-    let mut names = vec!["Demir Metrajı".to_string()];
-    names.extend(group.items.iter().map(|i| i.name.clone()));
-    let Some(v) = values(host, "Kayıtlar", vec![choice("item", "Kalem", names)]) else {
-        return Ok(());
-    };
-    let item = index(&v, "item")?;
-    let labels = if item == 0 {
-        group
-            .rebar
-            .iter()
-            .map(|r| {
-                format!(
-                    "{} adet Ø{} L={} cm | {:.3} kg | {}",
-                    r.quantity, r.diameter, r.length_cm, r.weight_kg, r.source
-                )
-            })
-            .collect::<Vec<_>>()
-    } else {
-        let row = group.items.get(item - 1).ok_or("Kalem bulunamadı.")?;
-        row.records
-            .iter()
-            .map(|r| {
-                format!(
-                    "{} | {:.4} {} | {}",
-                    r.method,
-                    r.quantity,
-                    row.unit_label(),
-                    r.source
-                )
-            })
-            .collect()
-    };
-    if labels.is_empty() {
-        return Err("Bu kalemde kayıt yok.".into());
-    }
-    let Some(v) = values(
-        host,
-        "Kayıt seç",
-        vec![
-            choice("record", "Kayıt", labels.clone()),
-            choice(
-                "action",
-                "İşlem",
-                vec!["Görüntüle".into(), "Kaydı sil".into()],
-            ),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let record = index(&v, "record")?;
-    if index(&v, "action")? == 0 {
-        let detail = labels.get(record).ok_or("Kayıt bulunamadı.")?;
-        host.show_dialog(
-            DialogDef::new("Metraj Kaydı")
-                .with_control(C::InfoText {
-                    text: detail.clone(),
-                    align_h: None,
-                })
-                .submit_label("Kapat"),
-        );
-        return Ok(());
-    }
-    if !confirm(host, "Seçili kayıt silinecek. Devam edilsin mi?") {
-        return Ok(());
-    }
+pub fn delete_record(host: &mut dyn HostApi, s: &mut Store, rebar: bool) -> Result<(), String> {
+    let (p, g) = active_group(s)?;
+    let record = crate::panels::record_index(host, rebar)?;
     let group = &mut s.projects[p].groups[g];
-    if item == 0 {
-        if record >= group.rebar.len() {
-            return Err("Kayıt bulunamadı.".into());
-        }
+    let description = if rebar {
+        let r = group.rebar.get(record).ok_or("Demir kaydı bulunamadı.")?;
+        format!(
+            "{} adet Ø{} · {:.3} kg",
+            r.quantity, r.diameter, r.weight_kg
+        )
+    } else {
+        let item = &group.items[active_item(group)?];
+        let r = item.records.get(record).ok_or("Metraj kaydı bulunamadı.")?;
+        format!("{} · {:.4} {}", item.name, r.quantity, item.unit_label())
+    };
+    if !confirm(
+        host,
+        &format!("{} numaralı kayıt silinsin mi?\n{description}", record + 1),
+    ) {
+        return Ok(());
+    }
+    if rebar {
         group.rebar.remove(record);
     } else {
-        let item = group.items.get_mut(item - 1).ok_or("Kalem bulunamadı.")?;
-        if record >= item.records.len() {
-            return Err("Kayıt bulunamadı.".into());
-        }
-        item.records.remove(record);
+        let i = active_item(group)?;
+        group.items[i].records.remove(record);
     }
     s.save()?;
     host.push_info("Kayıt silindi.");
     Ok(())
 }
+
+pub fn delete_item(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
+    let (p, g) = active_group(s)?;
+    let group = &mut s.projects[p].groups[g];
+    let i = active_item(group)?;
+    if !confirm(
+        host,
+        &format!(
+            "{} kalemi ve tüm ölçüm kayıtları silinsin mi?",
+            group.items[i].name
+        ),
+    ) {
+        return Ok(());
+    }
+    group.items.remove(i);
+    s.save()?;
+    crate::panels::close_item();
+    host.push_info("Metraj kalemi silindi.");
+    Ok(())
+}
+
 fn confirm(host: &mut dyn HostApi, message: &str) -> bool {
     matches!(
         host.show_dialog(
@@ -152,16 +106,11 @@ fn confirm(host: &mut dyn HostApi, message: &str) -> bool {
         DialogResponse::Submitted(_)
     )
 }
-pub fn edit_item(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let Some(i) = item_index(host, &s.projects[p].groups[g])? else {
-        return Ok(());
-    };
+pub fn edit_item(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
+    let (p, g) = active_group(s)?;
+    let i = active_item(&s.projects[p].groups[g])?;
     let current = &s.projects[p].groups[g].items[i];
-    let units = ["m", "m²", "m³", "adet", "kg", "ton"];
+    let units = UNITS;
     let selected = units.iter().position(|u| *u == current.unit).unwrap_or(0);
     let Some(v) = values(
         host,
@@ -216,88 +165,49 @@ pub fn edit_item(host: &mut dyn HostApi) -> Result<(), String> {
     host.push_info("Kalem kaydedildi.");
     Ok(())
 }
-pub fn edit(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    if s.projects.is_empty() {
-        return Err("Önce bir proje oluşturun.".into());
+pub fn edit(host: &mut dyn HostApi, s: &mut Store) -> Result<(), String> {
+    let p = active_project(s)?;
+    let group_index = active_group(s).ok().map(|(_, g)| g);
+    let mut scopes = vec!["Seçili proje".into()];
+    if group_index.is_some() {
+        scopes.push("Etkin grup".into());
     }
     let Some(v) = values(
         host,
-        "Düzenle / Sil",
+        "Proje ve grup yönetimi",
         vec![
-            choice(
-                "scope",
-                "Tür",
-                vec!["Proje".into(), "Grup".into(), "Kalem".into()],
-            ),
+            choice("scope", "Tür", scopes),
             choice("action", "İşlem", vec!["Ad değiştir".into(), "Sil".into()]),
         ],
     ) else {
         return Ok(());
     };
-    let scope = index(&v, "scope")?;
-    let action = index(&v, "action")?;
-    let (p, g) = if scope == 0 {
-        let Some(v) = values(
-            host,
-            "Proje seç",
-            vec![choice(
-                "project",
-                "Proje",
-                s.projects.iter().map(|p| p.name.clone()).collect(),
-            )],
-        ) else {
-            return Ok(());
-        };
-        let p = index(&v, "project")?;
-        if p >= s.projects.len() {
-            return Err("Proje bulunamadı.".into());
-        }
-        (p, 0)
-    } else {
-        let Some(target) = target(host, &s)? else {
-            return Ok(());
-        };
-        target
+    let group_index = match index(&v, "scope")? {
+        0 => None,
+        1 => Some(group_index.ok_or("Etkin grup bulunamadı.")?),
+        _ => return Err("Tür bulunamadı.".into()),
     };
-    let item = if scope == 2 {
-        match item_index(host, &s.projects[p].groups[g])? {
-            Some(i) => Some(i),
-            None => return Ok(()),
-        }
-    } else {
-        None
+    let old = match group_index {
+        Some(g) => s.projects[p].groups[g].name.clone(),
+        None => s.projects[p].name.clone(),
     };
-    if action == 1 {
+    if index(&v, "action")? == 1 {
         if !confirm(
             host,
-            "Seçim ve içerdiği tüm kayıtlar silinecek. Devam edilsin mi?",
+            &format!("{old} ve içerdiği tüm kayıtlar silinsin mi?"),
         ) {
             return Ok(());
         }
-        match scope {
-            0 => {
-                s.projects.remove(p);
-            }
-            1 => {
+        match group_index {
+            Some(g) => {
                 s.projects[p].groups.remove(g);
             }
-            2 => {
-                s.projects[p].groups[g]
-                    .items
-                    .remove(item.ok_or("Kalem bulunamadı.")?);
+            None => {
+                s.projects.remove(p);
             }
-            _ => return Err("Tür bulunamadı.".into()),
-        };
+        }
+        s.save()?;
     } else {
-        let old = match scope {
-            0 => s.projects[p].name.clone(),
-            1 => s.projects[p].groups[g].name.clone(),
-            2 => s.projects[p].groups[g].items[item.ok_or("Kalem bulunamadı.")?]
-                .name
-                .clone(),
-            _ => return Err("Tür bulunamadı.".into()),
-        };
         let Some(v) = values(host, "Ad değiştir", vec![text("name", "Yeni ad", &old)]) else {
             return Ok(());
         };
@@ -305,22 +215,36 @@ pub fn edit(host: &mut dyn HostApi) -> Result<(), String> {
         if name.is_empty() {
             return Err("Ad boş olamaz.".into());
         }
-        match scope {
-            0 => s.projects[p].name = name,
-            1 => s.projects[p].groups[g].name = name,
-            2 => s.projects[p].groups[g].items[item.ok_or("Kalem bulunamadı.")?].name = name,
-            _ => unreachable!(),
+        if let Some(g) = group_index {
+            let groups = &mut s.projects[p].groups;
+            if groups
+                .iter()
+                .enumerate()
+                .any(|(i, other)| i != g && other.name.eq_ignore_ascii_case(&name))
+            {
+                return Err("Bu grup adı zaten var.".into());
+            }
+            groups[g].name = name.clone();
+            s.save()?;
+            crate::panels::rename_group(&old, name);
+        } else {
+            if s.projects
+                .iter()
+                .enumerate()
+                .any(|(i, other)| i != p && other.name.eq_ignore_ascii_case(&name))
+            {
+                return Err("Bu proje adı zaten var.".into());
+            }
+            s.projects[p].name = name.clone();
+            s.save()?;
+            crate::panels::rename_project(&old, name);
         }
     }
-    s.save()?;
     host.push_info("Değişiklik kaydedildi.");
     Ok(())
 }
-pub fn export(host: &mut dyn HostApi) -> Result<(), String> {
-    let s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
+pub fn export(host: &mut dyn HostApi, s: &Store) -> Result<(), String> {
+    let (p, g) = active_group(s)?;
     let group = &s.projects[p].groups[g];
     let d = DialogDef::new("Grup icmalini Excel'e aktar")
         .with_control(C::FilePicker {

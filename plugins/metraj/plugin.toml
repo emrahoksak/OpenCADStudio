@@ -1,8 +1,8 @@
 [plugin]
 id = "metraj.opencad"
 name = "Metraj"
-version = "0.1.0"
-description = "Proje bazlı metraj yönetimi"
+version = "0.2.0"
+description = "Proje, kalem ve demir metrajı çalışma panelleri"
 author = "Metraj"
 license = "GPL-3.0-only"
 

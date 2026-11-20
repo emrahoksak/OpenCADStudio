@@ -128,7 +128,18 @@ impl Store {
         Ok(store)
     }
 
-    pub fn save(&self) -> Result<(), String> {
+    pub fn original_revision(&self) -> Option<&[u8]> {
+        self.original.as_deref()
+    }
+
+    pub fn stamp(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        let mut hasher = DefaultHasher::new();
+        self.original.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    pub fn save(&mut self) -> Result<(), String> {
         let path = path()?;
         fs::create_dir_all(path.parent().ok_or("Veri klasörü bulunamadı")?)
             .map_err(|e| e.to_string())?;
@@ -154,6 +165,7 @@ impl Store {
             fs::copy(&path, path.with_extension("json.bak")).map_err(|e| e.to_string())?;
         }
         temp.persist(&path).map_err(|e| e.error.to_string())?;
+        self.original = Some(bytes);
         Ok(())
     }
 }

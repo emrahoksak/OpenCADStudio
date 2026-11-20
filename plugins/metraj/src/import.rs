@@ -4,8 +4,7 @@ use ocs_plugin_api::host::HostApi;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Result as SqlResult};
 use std::path::PathBuf;
 
-pub fn run(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut store = Store::load()?;
+pub fn run(host: &mut dyn HostApi, store: &mut Store) -> Result<(), String> {
     let suggested = std::env::var_os("APPDATA")
         .map(|dir| PathBuf::from(dir).join("MHMETRAJ/mhmetraj.db"))
         .filter(|path| path.is_file())

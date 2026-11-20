@@ -10,10 +10,10 @@ use std::sync::{Mutex, OnceLock};
 struct Session {
     command: String,
     responses: Vec<DialogResponse>,
-    selection: Vec<Handle>,
     tab: usize,
     revision: Option<Vec<u8>>,
     panel: Option<PanelSnapshot>,
+    target: crate::panels::Target,
 }
 fn session() -> &'static Mutex<Option<Session>> {
     static SESSION: OnceLock<Mutex<Option<Session>>> = OnceLock::new();
@@ -23,8 +23,15 @@ fn session() -> &'static Mutex<Option<Session>> {
 pub fn run(
     host: &mut dyn HostApi,
     command: &str,
-    execute: fn(&mut dyn HostApi, &str) -> Result<(), String>,
+    execute: fn(&mut dyn HostApi, &str, &mut Store) -> Result<(), String>,
 ) {
+    let mut store = match Store::load() {
+        Ok(store) => store,
+        Err(error) => {
+            host.push_error(&error);
+            return;
+        }
+    };
     let state = if command == "METRAJ_DEVAM" {
         match session().lock().unwrap().take() {
             Some(s) => s,
@@ -34,30 +41,34 @@ pub fn run(
             }
         }
     } else {
-        let revision = match Store::revision() {
-            Ok(revision) => revision,
-            Err(error) => {
-                host.push_error(&error);
-                return;
-            }
+        if let Err(error) = crate::panels::require_current(host, &store) {
+            host.push_error(&error);
+            return;
+        }
+        let panel = match command {
+            "METRAJ_KAYIT_SIL" => host.panel_snapshot(crate::panels::ITEMS).ok(),
+            "METRAJ_DEMIR_SIL" => host.panel_snapshot(crate::panels::REBAR).ok(),
+            _ => None,
         };
         Session {
             command: command.into(),
             responses: Vec::new(),
-            selection: host.selection(),
             tab: host.tab_index(),
-            revision,
-            panel: host.panel_snapshot(crate::PANEL_ID).ok(),
+            revision: store.original_revision().map(<[u8]>::to_vec),
+            panel,
+            target: crate::panels::target_snapshot(),
         }
     };
     if state.tab != host.tab_index() {
         host.push_error("Çizim sekmesi değişti; metraj işlemi iptal edildi.");
         return;
     }
-    if command == "METRAJ_DEVAM"
-        && !matches!(Store::revision(), Ok(revision) if revision == state.revision)
-    {
+    if command == "METRAJ_DEVAM" && store.original_revision() != state.revision.as_deref() {
         host.push_error("Metraj verileri değişti. İşlemi yeniden başlatın.");
+        return;
+    }
+    if state.target != crate::panels::target_snapshot() {
+        host.push_error("Etkin proje, grup veya kalem değişti; metraj işlemi iptal edildi.");
         return;
     }
     let (outcome, pending) = {
@@ -66,10 +77,9 @@ pub fn run(
             answers: &state.responses,
             cursor: 0,
             pending: None,
-            selection: &state.selection,
             panel: state.panel.as_ref(),
         };
-        let outcome = execute(&mut proxy, &state.command);
+        let outcome = execute(&mut proxy, &state.command, &mut store);
         (outcome, proxy.pending)
     };
     if let Some(dialog) = pending {
@@ -82,9 +92,25 @@ pub fn run(
         host.push_error(&error);
     } else if matches!(
         state.command.as_str(),
-        "METRAJ_PROJE" | "METRAJ_GRUP" | "METRAJ_DUZENLE" | "METRAJ_AKTAR"
+        "METRAJ_AKTAR"
+            | "METRAJ_DUZENLE"
+            | "METRAJ_KALEM_DUZENLE"
+            | "METRAJ_KALEM_SIL"
+            | "METRAJ_KAYIT_SIL"
+            | "METRAJ_DEMIR_SIL"
     ) {
-        crate::refresh_panel(host);
+        if let Err(error) = crate::panels::refresh(host, &store) {
+            host.push_error(&error);
+            return;
+        }
+        if matches!(
+            state.command.as_str(),
+            "METRAJ_KALEM_DUZENLE" | "METRAJ_KALEM_SIL"
+        ) {
+            if let Err(error) = crate::panels::reveal(host, crate::panels::ITEMS) {
+                host.push_error(&error);
+            }
+        }
     }
 }
 struct Form {
@@ -125,7 +151,6 @@ struct ReplayHost<'a> {
     answers: &'a [DialogResponse],
     cursor: usize,
     pending: Option<DialogDef>,
-    selection: &'a [Handle],
     panel: Option<&'a PanelSnapshot>,
 }
 impl HostApi for ReplayHost<'_> {
@@ -205,9 +230,6 @@ impl HostApi for ReplayHost<'_> {
     }
     fn document_reader(&self) -> Box<dyn DocumentReader + '_> {
         self.host.document_reader()
-    }
-    fn selection(&self) -> Vec<Handle> {
-        self.selection.to_vec()
     }
     fn panel_snapshot(&self, panel_id: &str) -> Result<PanelSnapshot, String> {
         self.panel

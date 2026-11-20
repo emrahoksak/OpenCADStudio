@@ -56,155 +56,43 @@ pub(crate) fn number(v: &HashMap<String, V>, id: &str) -> Result<f64, String> {
     }
     Ok(n)
 }
-pub(crate) fn target(
-    host: &mut dyn HostApi,
-    store: &Store,
-) -> Result<Option<(usize, usize)>, String> {
-    if let Ok(snapshot) = host.panel_snapshot(crate::PANEL_ID) {
-        if snapshot.errors.is_empty() {
-            if let Some(V::Choice { index, text }) = snapshot.values.get(crate::ACTIVE_GROUP) {
-                if let Some((target, _)) = index
-                    .checked_sub(1)
-                    .and_then(|i| crate::group_choices(store).into_iter().nth(i))
-                    .filter(|(_, label)| label == text)
-                {
-                    return Ok(Some(target));
-                }
-            }
-        }
-    }
-    if store.projects.is_empty() {
-        return Err("Önce bir proje oluşturun.".into());
-    }
-    let Some(p) = values(
-        host,
-        "Proje seç",
-        vec![choice(
-            "project",
-            "Proje",
-            store.projects.iter().map(|p| p.name.clone()).collect(),
-        )],
-    ) else {
-        return Ok(None);
-    };
-    let pi = index(&p, "project")?;
-    let p = store.projects.get(pi).ok_or("Proje bulunamadı.")?;
-    if p.groups.is_empty() {
-        return Err("Önce bu projede grup oluşturun.".into());
-    }
-    let Some(g) = values(
-        host,
-        "Grup seç",
-        vec![choice(
-            "group",
-            "Grup",
-            p.groups.iter().map(|g| g.name.clone()).collect(),
-        )],
-    ) else {
-        return Ok(None);
-    };
-    let gi = index(&g, "group")?;
-    if gi >= p.groups.len() {
-        return Err("Grup bulunamadı.".into());
-    }
-    Ok(Some((pi, gi)))
-}
-pub(crate) fn item_index(
-    host: &mut dyn HostApi,
-    group: &crate::store::Group,
-) -> Result<Option<usize>, String> {
-    if group.items.is_empty() {
-        return Err("Önce bir metraj kalemi oluşturun.".into());
-    }
-    let Some(v) = values(
-        host,
-        "Kalem seç",
-        vec![choice(
-            "item",
-            "Kalem",
-            group
-                .items
-                .iter()
-                .map(|i| format!("{} ({})", i.name, i.unit_label()))
-                .collect(),
-        )],
-    ) else {
-        return Ok(None);
-    };
-    let i = index(&v, "item")?;
-    if i >= group.items.len() {
-        return Err("Kalem bulunamadı.".into());
-    }
-    Ok(Some(i))
-}
-pub fn create_item(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let Some(v) = values(
-        host,
-        "Metraj kalemi",
-        vec![
-            text("name", "Kalem adı", ""),
-            text("poz", "Poz no", ""),
-            choice(
-                "unit",
-                "Birim",
-                ["m", "m²", "m³", "adet", "kg", "ton"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let name = string(&v, "name")?;
+pub const UNITS: &[&str] = &["m", "m²", "m³", "adet", "kg", "ton"];
+
+pub fn create_item(
+    s: &mut Store,
+    p: usize,
+    g: usize,
+    v: &HashMap<String, V>,
+) -> Result<usize, String> {
+    let name = string(v, "name")?;
     if name.is_empty() {
         return Err("Kalem adı boş olamaz.".into());
     }
-    let unit = ["m", "m²", "m³", "adet", "kg", "ton"]
-        .get(index(&v, "unit")?)
+    let unit = UNITS
+        .get(index(v, "unit")?)
         .ok_or("Birim bulunamadı.")?
         .to_string();
     s.projects[p].groups[g].items.push(Item {
         name,
-        poz: string(&v, "poz")?,
+        poz: string(v, "poz")?,
         unit,
         display_unit: None,
         records: Vec::new(),
     });
     s.save()?;
-    host.push_info("Metraj kalemi oluşturuldu.");
-    Ok(())
+    Ok(s.projects[p].groups[g].items.len() - 1)
 }
-pub fn manual(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let Some(i) = item_index(host, &s.projects[p].groups[g])? else {
-        return Ok(());
-    };
-    let Some(v) = values(
-        host,
-        "Manuel metraj",
-        vec![
-            text("quantity", "Miktar (minha için negatif)", ""),
-            text("note", "Açıklama", ""),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let q = number(&v, "quantity")?;
+pub fn manual(host: &mut dyn HostApi, s: &mut Store, v: &HashMap<String, V>) -> Result<(), String> {
+    let (p, g) = crate::panels::active_group(s)?;
+    let i = crate::panels::active_item(&s.projects[p].groups[g])?;
+    let q = number(v, "quantity")?;
     if q == 0.0 {
         return Err("Miktar sıfır olamaz.".into());
     }
     s.projects[p].groups[g].items[i].records.push(Record {
         method: "Manuel".into(),
         quantity: q,
-        source: string(&v, "note")?,
+        source: string(v, "note")?,
         handles: Vec::new(),
         original_layers: Vec::new(),
     });
@@ -256,57 +144,34 @@ fn poly_measure(
         },
     ))
 }
-pub fn measure(host: &mut dyn HostApi) -> Result<(), String> {
+pub fn measurement_modes(unit: &str) -> &'static [&'static str] {
+    match unit {
+        "m" => &["Uzunluk"],
+        "m²" => &["Alan", "Uzunluk × yükseklik"],
+        "m³" => &["Alan × yükseklik"],
+        _ => &[],
+    }
+}
+
+pub fn measure(
+    host: &mut dyn HostApi,
+    s: &mut Store,
+    v: &HashMap<String, V>,
+) -> Result<(), String> {
     let selected = host.selection();
     if selected.is_empty() {
         return Err("Önce çizimde ölçülecek nesneleri seçin.".into());
     }
-    let mut s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
-    let Some(i) = item_index(host, &s.projects[p].groups[g])? else {
-        return Ok(());
-    };
+    let (p, g) = crate::panels::active_group(s)?;
+    let i = crate::panels::active_item(&s.projects[p].groups[g])?;
     let unit = s.projects[p].groups[g].items[i].unit.clone();
-    let modes =
-        match unit.as_str() {
-            "m" => vec!["Uzunluk"],
-            "m²" => vec!["Alan", "Uzunluk × yükseklik"],
-            "m³" => vec!["Alan × yükseklik"],
-            _ => return Err(
-                "Bu birimde çizimden alan/uzunluk ölçümü desteklenmiyor; manuel giriş kullanın."
-                    .into(),
-            ),
-        };
-    let Some(v) = values(
-        host,
-        "Çizimden metraj",
-        vec![
-            choice(
-                "method",
-                "Yöntem",
-                modes.iter().map(|s| s.to_string()).collect(),
-            ),
-            choice(
-                "scale",
-                "Çizim birimi",
-                ["cm", "mm", "m"].iter().map(|s| s.to_string()).collect(),
-            ),
-            text("height", "Yükseklik (m)", "3"),
-            choice("sign", "İşlem", vec!["Metraj".into(), "Minha".into()]),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let method = *modes
-        .get(index(&v, "method")?)
-        .ok_or("Yöntem bulunamadı.")?;
+    let modes = measurement_modes(&unit);
+    let method = *modes.get(index(v, "method")?).ok_or("Yöntem bulunamadı.")?;
     let factor = *[0.01, 0.001, 1.0]
-        .get(index(&v, "scale")?)
+        .get(index(v, "scale")?)
         .ok_or("Birim bulunamadı.")?;
     let h = if method.contains('×') {
-        let h = number(&v, "height")?;
+        let h = number(v, "height")?;
         if h <= 0.0 {
             return Err("Yükseklik pozitif olmalıdır.".into());
         }
@@ -333,7 +198,7 @@ pub fn measure(host: &mut dyn HostApi) -> Result<(), String> {
         originals.push(entity.clone());
     }
     let mut quantity = sum * h;
-    if index(&v, "sign")? == 1 {
+    if index(v, "sign")? == 1 {
         quantity = -quantity;
     }
     if !quantity.is_finite() || quantity == 0.0 {
@@ -369,11 +234,8 @@ pub fn measure(host: &mut dyn HostApi) -> Result<(), String> {
     host.push_info(&format!("Metraj kaydedildi: {:.4} {}", quantity, unit));
     Ok(())
 }
-pub fn summary(host: &mut dyn HostApi) -> Result<(), String> {
-    let s = Store::load()?;
-    let Some((p, g)) = target(host, &s)? else {
-        return Ok(());
-    };
+pub fn summary(host: &mut dyn HostApi, s: &Store) -> Result<(), String> {
+    let (p, g) = crate::panels::active_group(s)?;
     let group = &s.projects[p].groups[g];
     let mut lines = vec![format!("{} / {}", s.projects[p].name, group.name)];
     let mut totals: BTreeMap<&str, f64> = BTreeMap::new();

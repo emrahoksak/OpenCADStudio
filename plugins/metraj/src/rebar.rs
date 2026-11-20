@@ -1,20 +1,35 @@
-use crate::store::{RebarRow, Store};
-use crate::workflow::{choice, index, number, string, target, text, values};
+use crate::store::{RebarRow, RebarSettings, Store};
+use crate::workflow::{choice, index, number, string, text};
 use document::entities::Entity;
 use document::types::{BoundingBox3D, Color, Vector2, Vector3};
 use ocs_plugin_api::dialog::{DialogControl as C, DialogValue as V};
 use ocs_plugin_api::host::{document, EntityType, HostApi, LayerConfig};
 use regex::Regex;
+use std::collections::HashMap;
 
 const MODES: [&str; 6] = ["Mod1", "Mod2", "Yatay", "Düşey", "Adetsiz", "Mod2++"];
 
-pub fn settings(host: &mut dyn HostApi) -> Result<(), String> {
-    let mut store = Store::load()?;
-    let Some((p, _)) = target(host, &store)? else {
-        return Ok(());
-    };
-    let old = &store.projects[p].settings;
-    let controls = vec![
+pub(crate) fn mode_label(mode: usize) -> &'static str {
+    MODES.get(mode).copied().unwrap_or(MODES[0])
+}
+
+const COLORS: [(&str, [u8; 3]); 7] = [
+    ("Kırmızı", [255, 64, 64]),
+    ("Turuncu", [255, 153, 0]),
+    ("Sarı", [255, 221, 0]),
+    ("Yeşil", [0, 200, 0]),
+    ("Camgöbeği", [0, 204, 221]),
+    ("Mavi", [64, 128, 255]),
+    ("Mor", [204, 102, 255]),
+];
+
+fn hex_color(rgb: [u8; 3]) -> String {
+    let [r, g, b] = rgb;
+    format!("#{r:02X}{g:02X}{b:02X}")
+}
+
+pub(crate) fn settings_controls(old: &RebarSettings) -> Vec<C> {
+    vec![
         C::Choice {
             id: "mode".into(),
             label: "Eşleştirme modu".into(),
@@ -29,28 +44,58 @@ pub fn settings(host: &mut dyn HostApi) -> Result<(), String> {
         ),
         C::Checkbox {
             id: "mixed".into(),
-            label: "Karma renk".into(),
+            label: "Her eşleşmeye ayrı renk ver".into(),
             default: old.mixed,
         },
-        C::Color {
-            id: "color".into(),
-            label: "Tek renk".into(),
-            default: old.color,
-        },
+        C::row(vec![
+            choice(
+                "color_preset",
+                "Tek renk",
+                std::iter::once("Özel renk".into())
+                    .chain(COLORS.iter().map(|(name, _)| (*name).into()))
+                    .collect(),
+            ),
+            text("color", "Özel renk (#RRGGBB)", &hex_color(old.color)),
+        ]),
         C::Checkbox {
             id: "box".into(),
             label: "Eşleşmelere çerçeve çiz".into(),
             default: old.bounding_box,
         },
-    ];
-    let Some(v) = values(host, "Demir Eşleştirme Ayarları", controls) else {
-        return Ok(());
-    };
-    let tol = number(&v, "tolerance")?;
+    ]
+}
+
+pub(crate) fn settings_values(old: &RebarSettings) -> HashMap<String, V> {
+    [
+        (
+            "mode".into(),
+            V::Choice {
+                index: old.mode.min(MODES.len() - 1),
+                text: mode_label(old.mode).into(),
+            },
+        ),
+        ("symbols".into(), V::Text(old.symbols.clone())),
+        ("tolerance".into(), V::Text(old.tolerance.to_string())),
+        ("mixed".into(), V::Bool(old.mixed)),
+        ("color".into(), V::Text(hex_color(old.color))),
+        (
+            "color_preset".into(),
+            V::Choice {
+                index: 0,
+                text: "Özel renk".into(),
+            },
+        ),
+        ("box".into(), V::Bool(old.bounding_box)),
+    ]
+    .into()
+}
+
+pub fn save_settings(store: &mut Store, p: usize, v: &HashMap<String, V>) -> Result<(), String> {
+    let tol = number(v, "tolerance")?;
     if tol < 0.0 {
         return Err("Tolerans negatif olamaz.".into());
     }
-    let symbols: String = string(&v, "symbols")?
+    let symbols: String = string(v, "symbols")?
         .chars()
         .filter(|c| !c.is_whitespace() && *c != '|')
         .collect();
@@ -58,21 +103,29 @@ pub fn settings(host: &mut dyn HostApi) -> Result<(), String> {
         return Err("En az bir çap sembolü girin.".into());
     }
     let setting = &mut store.projects[p].settings;
-    setting.mode = index(&v, "mode")?;
+    setting.mode = index(v, "mode")?;
     if setting.mode >= MODES.len() {
         return Err("Mod geçersiz.".into());
     }
     setting.symbols = symbols;
     setting.tolerance = tol;
     setting.mixed = matches!(v.get("mixed"), Some(V::Bool(true)));
-    setting.color = match v.get("color") {
-        Some(V::Color(c)) => *c,
-        _ => return Err("Renk seçilmedi.".into()),
+    setting.color = match index(v, "color_preset")? {
+        0 => parse_color(&string(v, "color")?)?,
+        n => COLORS.get(n - 1).ok_or("Renk bulunamadı.")?.1,
     };
     setting.bounding_box = matches!(v.get("box"), Some(V::Bool(true)));
-    store.save()?;
-    host.push_info("Demir ayarları kaydedildi.");
-    Ok(())
+    store.save()
+}
+
+fn parse_color(text: &str) -> Result<[u8; 3], String> {
+    let hex = text.strip_prefix('#').unwrap_or(text);
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("Özel renk için #RRGGBB biçiminde bir değer girin.".into());
+    }
+    let rgb = u32::from_str_radix(hex, 16).map_err(|err| err.to_string())?;
+    let [_, r, g, b] = rgb.to_be_bytes();
+    Ok([r, g, b])
 }
 
 struct TextInfo {
@@ -227,32 +280,23 @@ fn mtext_bounds(text: &document::entities::MText) -> BoundingBox3D {
     BoundingBox3D::new(min, max)
 }
 
-pub fn capture(host: &mut dyn HostApi) -> Result<(), String> {
+pub fn capture(
+    host: &mut dyn HostApi,
+    store: &mut Store,
+    v: &HashMap<String, V>,
+) -> Result<(), String> {
     let handles = host.selection();
     if handles.is_empty() {
         return Err("Önce demir TEXT/MTEXT nesnelerini seçin.".into());
     }
-    let mut store = Store::load()?;
-    let Some((p, g)) = target(host, &store)? else {
-        return Ok(());
-    };
-    let Some(v) = values(
-        host,
-        "Demir metrajı",
-        vec![
-            text("multiplier", "x adet", "1"),
-            choice("sign", "İşlem", vec!["Metraj".into(), "Minha".into()]),
-        ],
-    ) else {
-        return Ok(());
-    };
-    let mult = string(&v, "multiplier")?
+    let (p, g) = crate::panels::active_group(store)?;
+    let mult = string(v, "multiplier")?
         .parse::<u32>()
         .map_err(|_| "x adet pozitif tam sayı olmalı.")?;
     if mult == 0 {
         return Err("x adet pozitif olmalı.".into());
     }
-    let sign = if index(&v, "sign")? == 1 { -1.0 } else { 1.0 };
+    let sign = if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
     let settings = &store.projects[p].settings;
     let mut texts = Vec::new();
     for handle in handles {
