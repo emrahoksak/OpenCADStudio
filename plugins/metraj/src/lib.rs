@@ -3,6 +3,7 @@ mod import;
 mod manage;
 mod panels;
 mod rebar;
+mod selection;
 mod store;
 mod workflow;
 
@@ -15,7 +16,7 @@ use store::Store;
 static MANIFEST: PluginManifest = PluginManifest {
     id: "metraj.opencad",
     name: "Metraj",
-    version: "0.2.0",
+    version: "0.2.1",
     description: "Proje, kalem ve demir metrajı çalışma panelleri",
     api_version: ApiVersion::CURRENT,
     ribbon_order: 55,

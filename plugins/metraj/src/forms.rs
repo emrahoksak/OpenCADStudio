@@ -5,12 +5,36 @@ use ocs_plugin_api::host::{
     InteractiveCommand, LayerConfig,
 };
 use std::any::Any;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
+
+// The runner reuses interactive command IDs across dispatches. Keep one
+// Metraj command alive at a time, including when the user switches drawings.
+static INTERACTIVE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+pub(crate) struct InteractiveSlot;
+
+impl InteractiveSlot {
+    pub(crate) fn acquire() -> Result<Self, String> {
+        INTERACTIVE_ACTIVE
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .map(|_| Self)
+            .map_err(|_| {
+                "Diğer çizimdeki Metraj işlemini tamamlayın veya Esc ile iptal edin.".into()
+            })
+    }
+}
+
+impl Drop for InteractiveSlot {
+    fn drop(&mut self) {
+        INTERACTIVE_ACTIVE.store(false, Ordering::Release);
+    }
+}
 
 struct Session {
     command: String,
     responses: Vec<DialogResponse>,
-    tab: usize,
+    tab: u64,
     revision: Option<Vec<u8>>,
     panel: Option<PanelSnapshot>,
     target: crate::panels::Target,
@@ -53,13 +77,13 @@ pub fn run(
         Session {
             command: command.into(),
             responses: Vec::new(),
-            tab: host.tab_index(),
+            tab: host.tab_id(),
             revision: store.original_revision().map(<[u8]>::to_vec),
             panel,
             target: crate::panels::target_snapshot(),
         }
     };
-    if state.tab != host.tab_index() {
+    if state.tab != host.tab_id() {
         host.push_error("Çizim sekmesi değişti; metraj işlemi iptal edildi.");
         return;
     }
@@ -83,10 +107,18 @@ pub fn run(
         (outcome, proxy.pending)
     };
     if let Some(dialog) = pending {
+        let slot = match InteractiveSlot::acquire() {
+            Ok(slot) => slot,
+            Err(error) => {
+                host.push_error(&error);
+                return;
+            }
+        };
         *session().lock().unwrap() = Some(state);
         host.start_interactive(Box::new(Form {
             dialog,
             closed: false,
+            _slot: slot,
         }));
     } else if let Err(error) = outcome {
         host.push_error(&error);
@@ -116,7 +148,16 @@ pub fn run(
 struct Form {
     dialog: DialogDef,
     closed: bool,
+    _slot: InteractiveSlot,
 }
+impl Drop for Form {
+    fn drop(&mut self) {
+        if !self.closed {
+            *session().lock().unwrap() = None;
+        }
+    }
+}
+
 impl InteractiveCommand for Form {
     fn prompt(&self) -> String {
         "Metraj formunu doldurun".into()

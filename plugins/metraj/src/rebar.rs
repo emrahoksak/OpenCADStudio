@@ -6,6 +6,7 @@ use ocs_plugin_api::dialog::{DialogControl as C, DialogValue as V};
 use ocs_plugin_api::host::{document, EntityType, HostApi, LayerConfig};
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 const MODES: [&str; 6] = ["Mod1", "Mod2", "Yatay", "Düşey", "Adetsiz", "Mod2++"];
 
@@ -148,22 +149,24 @@ fn quantity(expr: &str) -> Option<u32> {
     Some(result)
 }
 fn cap(value: &str, symbols: &str) -> Option<(u32, u32)> {
-    let q = Regex::new(r"(?i)(\d+(?:\s*[x×*]\s*\d+)*)\s*$").ok()?;
-    let d = Regex::new(r"^\s*(\d+)").ok()?;
+    static QUANTITY: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)(\d+(?:\s*[x×*]\s*\d+)*)\s*$").unwrap());
+    static DIAMETER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(\d+)").unwrap());
     let mut found = None;
     for (i, c) in value.char_indices() {
         if !symbols.contains(c) {
             continue;
         }
         let before = &value[..i];
-        if let Some(m) = q.find(before) {
+        if let Some(m) = QUANTITY.find(before) {
             let prefix = before[..m.start()].trim_end();
             if prefix.ends_with(|c: char| "xX×*.,-+".contains(c)) {
                 continue;
             }
             if let (Some(qty), Some(dia)) = (
                 quantity(m.as_str()),
-                d.captures(&value[i + c.len_utf8()..])
+                DIAMETER
+                    .captures(&value[i + c.len_utf8()..])
                     .and_then(|v| v[1].parse::<u32>().ok()),
             ) {
                 if (1..=100).contains(&dia) {
@@ -175,8 +178,9 @@ fn cap(value: &str, symbols: &str) -> Option<(u32, u32)> {
     found
 }
 fn length(value: &str) -> Option<f64> {
-    let re = Regex::new(r"(?i)\bL\s*=\s*(\d+(?:[.,]\d+)?)").ok()?;
-    let n = re.captures(value)?[1]
+    static LENGTH: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)\bL\s*=\s*(\d+(?:[.,]\d+)?)").unwrap());
+    let n = LENGTH.captures(value)?[1]
         .replace(',', ".")
         .parse::<f64>()
         .ok()?;
@@ -192,8 +196,10 @@ fn diameter(value: &str, symbols: &str) -> Option<u32> {
     if !symbols.contains(c) {
         return None;
     }
-    let re = Regex::new(r"^\s*(\d+)").ok()?;
-    let d = re.captures(&v[c.len_utf8()..])?[1].parse::<u32>().ok()?;
+    static DIAMETER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(\d+)").unwrap());
+    let d = DIAMETER.captures(&v[c.len_utf8()..])?[1]
+        .parse::<u32>()
+        .ok()?;
     if (1..=100).contains(&d) {
         Some(d)
     } else {
@@ -201,8 +207,9 @@ fn diameter(value: &str, symbols: &str) -> Option<u32> {
     }
 }
 fn quantity_label(value: &str) -> Option<u32> {
-    let re = Regex::new(r"(?i)(\d+(?:\s*[x×*]\s*\d+)*)\s*A(?:D|T)ET\b").ok()?;
-    let captures = re.captures_iter(value).last()?;
+    static COUNT: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"(?i)(\d+(?:\s*[x×*]\s*\d+)*)\s*A(?:D|T)ET\b").unwrap());
+    let captures = COUNT.captures_iter(value).last()?;
     let quantity_match = captures.get(1)?;
     let prefix = value[..quantity_match.start()].trim_end();
     if prefix.ends_with(|c: char| "xX×*.,-+".contains(c)) {
@@ -280,16 +287,12 @@ fn mtext_bounds(text: &document::entities::MText) -> BoundingBox3D {
     BoundingBox3D::new(min, max)
 }
 
-pub fn capture(
-    host: &mut dyn HostApi,
-    store: &mut Store,
-    v: &HashMap<String, V>,
-) -> Result<(), String> {
-    let handles = host.selection();
-    if handles.is_empty() {
-        return Err("Önce demir TEXT/MTEXT nesnelerini seçin.".into());
-    }
-    let (p, g) = crate::panels::active_group(store)?;
+pub(crate) struct CaptureOptions {
+    multiplier: u32,
+    sign: f64,
+}
+
+pub(crate) fn capture_options(v: &HashMap<String, V>) -> Result<CaptureOptions, String> {
     let mult = string(v, "multiplier")?
         .parse::<u32>()
         .map_err(|_| "x adet pozitif tam sayı olmalı.")?;
@@ -297,14 +300,24 @@ pub fn capture(
         return Err("x adet pozitif olmalı.".into());
     }
     let sign = if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
+    Ok(CaptureOptions {
+        multiplier: mult,
+        sign,
+    })
+}
+
+pub fn capture(
+    host: &mut dyn HostApi,
+    store: &mut Store,
+    options: CaptureOptions,
+    entities: Vec<EntityType>,
+) -> Result<(), String> {
+    let (p, g) = crate::panels::active_group(store)?;
     let settings = &store.projects[p].settings;
+    let CaptureOptions { multiplier, sign } = options;
     let mut texts = Vec::new();
-    for handle in handles {
-        let entity = host
-            .document()
-            .get_entity(handle)
-            .ok_or("Seçilen nesne bulunamadı.")?
-            .clone();
+    let selected_count = entities.len();
+    for entity in entities {
         let (raw, pos) = match &entity {
             EntityType::Text(t) => (
                 t.value.clone(),
@@ -322,7 +335,7 @@ pub fn capture(
                     t.insertion_point.z,
                 ],
             ),
-            _ => return Err("Yalnızca TEXT/MTEXT seçin.".into()),
+            _ => continue,
         };
         texts.push(TextInfo {
             entity,
@@ -337,6 +350,15 @@ pub fn capture(
             diameter: 0,
             length: 0.0,
         });
+    }
+    if texts.is_empty() {
+        return Err("Seçimde demir yazısı yok. TEXT veya MTEXT seçin.".into());
+    }
+    if selected_count > texts.len() {
+        host.push_info(&format!(
+            "{} yazı dışı nesne demir ölçümüne alınmadı.",
+            selected_count - texts.len()
+        ));
     }
     let mut groups: Vec<(Vec<usize>, u32, u32, f64)> = Vec::new();
     if settings.mode == 0 {
@@ -438,7 +460,7 @@ pub fn capture(
     }
     let mut rows = Vec::new();
     for (ids, q, d, l) in &groups {
-        let qty = q.checked_mul(mult).ok_or("Adet sınırı aşıldı.")?;
+        let qty = q.checked_mul(multiplier).ok_or("Adet sınırı aşıldı.")?;
         let weight = qty as f64 * l / 100.0 * (*d as f64).powi(2) / 162.0 * sign;
         if !weight.is_finite() {
             return Err("Demir hesabı sayısal sınırı aşıyor.".into());
@@ -555,7 +577,11 @@ pub fn capture(
         ));
     } else if !rectangles.is_empty() {
         let expected = rectangles.len();
-        let added = host.add_entities(rectangles).len();
+        let added = host
+            .add_entities(rectangles)
+            .iter()
+            .filter(|handle| !handle.is_null())
+            .count();
         if added != expected {
             host.push_error(&format!(
                 "{expected} eşleşme çerçevesinden {added} tanesi çizildi."

@@ -153,24 +153,23 @@ pub fn measurement_modes(unit: &str) -> &'static [&'static str] {
     }
 }
 
-pub fn measure(
-    host: &mut dyn HostApi,
-    s: &mut Store,
-    v: &HashMap<String, V>,
-) -> Result<(), String> {
-    let selected = host.selection();
-    if selected.is_empty() {
-        return Err("Önce çizimde ölçülecek nesneleri seçin.".into());
-    }
+pub(crate) struct MeasureOptions {
+    method: &'static str,
+    factor: f64,
+    height: f64,
+    sign: f64,
+}
+
+pub(crate) fn measure_options(s: &Store, v: &HashMap<String, V>) -> Result<MeasureOptions, String> {
     let (p, g) = crate::panels::active_group(s)?;
     let i = crate::panels::active_item(&s.projects[p].groups[g])?;
-    let unit = s.projects[p].groups[g].items[i].unit.clone();
-    let modes = measurement_modes(&unit);
+    let unit = &s.projects[p].groups[g].items[i].unit;
+    let modes = measurement_modes(unit);
     let method = *modes.get(index(v, "method")?).ok_or("Yöntem bulunamadı.")?;
     let factor = *[0.01, 0.001, 1.0]
         .get(index(v, "scale")?)
         .ok_or("Birim bulunamadı.")?;
-    let h = if method.contains('×') {
+    let height = if method.contains('×') {
         let h = number(v, "height")?;
         if h <= 0.0 {
             return Err("Yükseklik pozitif olmalıdır.".into());
@@ -179,36 +178,80 @@ pub fn measure(
     } else {
         1.0
     };
+    let sign = if index(v, "sign")? == 1 { -1.0 } else { 1.0 };
+    Ok(MeasureOptions {
+        method,
+        factor,
+        height,
+        sign,
+    })
+}
+
+pub fn measure(
+    host: &mut dyn HostApi,
+    s: &mut Store,
+    options: MeasureOptions,
+    mut entities: Vec<EntityType>,
+) -> Result<(), String> {
+    let (p, g) = crate::panels::active_group(s)?;
+    let i = crate::panels::active_item(&s.projects[p].groups[g])?;
+    let item = &mut s.projects[p].groups[g].items[i];
+    let unit = item.unit_label().to_owned();
+    let MeasureOptions {
+        method,
+        factor,
+        height,
+        sign,
+    } = options;
     let area = method.starts_with("Alan");
     let mut sum = 0.0;
-    let mut originals = Vec::new();
-    let mut layers = Vec::new();
-    for handle in &selected {
-        let entity = host
-            .document()
-            .get_entity(*handle)
-            .ok_or("Seçilen nesne artık bulunmuyor.")?;
-        let (len,a)=match entity {EntityType::Line(l) if !area=>(((l.end.x-l.start.x).powi(2)+(l.end.y-l.start.y).powi(2)+(l.end.z-l.start.z).powi(2)).sqrt(),0.0),EntityType::LwPolyline(pl)=>{if area&&!pl.is_closed{return Err("Alan için kapalı polyline seçilmelidir.".into());}poly_measure(pl)?},EntityType::Hatch(h) if area=>(0.0,h.area().ok_or("Hatch alanı hesaplanamadı.")?.abs()),_=>return Err("Seçimde bu yöntemle ölçülemeyen bir nesne var. Uzunluk için LINE/LWPOLYLINE, alan için kapalı LWPOLYLINE veya HATCH seçin.".into())};
-        sum += if area {
-            a * factor * factor
-        } else {
-            len * factor
+    let mut handles = Vec::with_capacity(entities.len());
+    let mut layers = Vec::with_capacity(entities.len());
+    for entity in &entities {
+        let value = match entity {
+            EntityType::Line(line) if !area => line.length() * factor,
+            EntityType::Arc(arc) if !area => arc.arc_length() * factor,
+            EntityType::Circle(circle) if area => circle.area() * factor * factor,
+            EntityType::Circle(circle) => circle.circumference() * factor,
+            EntityType::LwPolyline(polyline) => {
+                if area && !polyline.is_closed {
+                    return Err("Alan için kapalı polyline seçilmelidir.".into());
+                }
+                let (length, enclosed_area) = poly_measure(polyline)?;
+                if area {
+                    enclosed_area * factor * factor
+                } else {
+                    length * factor
+                }
+            }
+            EntityType::Hatch(hatch) if area => {
+                hatch.area().ok_or("Hatch alanı hesaplanamadı.")?.abs() * factor * factor
+            }
+            _ => {
+                let supported = if area {
+                    "kapalı LWPOLYLINE, CIRCLE veya HATCH"
+                } else {
+                    "LINE, LWPOLYLINE, ARC veya CIRCLE"
+                };
+                return Err(format!(
+                    "{:X} numaralı nesne bu yöntemle ölçülemiyor. {supported} seçin.",
+                    entity.common().handle.value(),
+                ));
+            }
         };
+        sum += value;
+        handles.push(entity.common().handle.value());
         layers.push(entity.common().layer.clone());
-        originals.push(entity.clone());
     }
-    let mut quantity = sum * h;
-    if index(v, "sign")? == 1 {
-        quantity = -quantity;
-    }
+    let quantity = sum * height * sign;
     if !quantity.is_finite() || quantity == 0.0 {
         return Err("Ölçüm sonucu sıfır veya geçersiz.".into());
     }
-    s.projects[p].groups[g].items[i].records.push(Record {
+    item.records.push(Record {
         method: method.into(),
         quantity,
-        source: format!("{} nesne", selected.len()),
-        handles: selected.iter().map(|h| h.value()).collect(),
+        source: format!("{} nesne", entities.len()),
+        handles,
         original_layers: layers,
     });
     s.save()?;
@@ -220,12 +263,11 @@ pub fn measure(
             })
             .is_some();
     if calculated {
-        for e in &mut originals {
+        for e in &mut entities {
             e.common_mut().layer = "HESAPLANDI".into();
             e.common_mut().color = ocs_plugin_api::host::document::types::Color::ByLayer;
         }
-        if let Err(e) = host.update_entities_transaction("Metraj nesnelerini işaretle", originals)
-        {
+        if let Err(e) = host.update_entities_transaction("Metraj nesnelerini işaretle", entities) {
             host.push_error(&format!("Metraj kaydedildi; katman güncellenemedi: {e}"));
         }
     } else {
