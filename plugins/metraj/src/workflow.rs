@@ -1,6 +1,6 @@
 use crate::store::{Item, Record, Store};
 use ocs_plugin_api::dialog::{DialogControl as C, DialogDef, DialogResponse, DialogValue as V};
-use ocs_plugin_api::host::{EntityType, HostApi, LayerConfig};
+use ocs_plugin_api::host::{EntityType, HostApi};
 use std::collections::{BTreeMap, HashMap};
 
 pub(crate) fn text(id: &str, label: &str, default: &str) -> C {
@@ -273,23 +273,18 @@ pub fn measure(
         original_layers: layers,
     });
     s.save()?;
-    let calculated = host.document().layers.get("HESAPLANDI").is_some()
-        || host
-            .add_layer(LayerConfig {
-                name: "HESAPLANDI".into(),
-                ..Default::default()
-            })
-            .is_some();
-    if calculated {
-        for e in &mut entities {
-            e.common_mut().layer = "HESAPLANDI".into();
-            e.common_mut().color = ocs_plugin_api::host::document::types::Color::ByLayer;
-        }
-        if let Err(e) = host.update_entities_transaction("Metraj nesnelerini işaretle", entities) {
-            host.push_error(&format!("Metraj kaydedildi; katman güncellenemedi: {e}"));
-        }
-    } else {
-        host.push_error("Metraj kaydedildi; HESAPLANDI katmanı oluşturulamadı.");
+    for entity in &mut entities {
+        entity.common_mut().layer = "HESAPLANDI".into();
+        entity.common_mut().color = ocs_plugin_api::host::document::types::Color::ByLayer;
+    }
+    let label = "Metraj nesnelerini işaretle";
+    host.begin_undo_group(label);
+    let result = crate::selection::mark_entities(host, label, entities);
+    host.end_undo_group();
+    if let Err(error) = result {
+        host.push_error(&format!(
+            "Metraj kaydedildi ancak çizim işaretlemesi tamamlanamadı. {error}"
+        ));
     }
     host.push_info(&format!("Metraj kaydedildi: {:.4} {}", quantity, unit));
     Ok(())

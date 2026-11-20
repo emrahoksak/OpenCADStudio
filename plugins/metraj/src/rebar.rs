@@ -3,7 +3,7 @@ use crate::workflow::{choice, index, number, string, text};
 use document::entities::Entity;
 use document::types::{BoundingBox3D, Color, Vector2, Vector3};
 use ocs_plugin_api::dialog::{DialogControl as C, DialogValue as V};
-use ocs_plugin_api::host::{document, EntityType, HostApi, LayerConfig};
+use ocs_plugin_api::host::{document, EntityType, HostApi};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -419,12 +419,26 @@ pub fn capture(
             groups.push((caps, quantity, diameter, texts[lens[0]].length));
             caps = Vec::new();
         }
-        let mut used = std::collections::HashSet::new();
+        let axis = match settings.mode {
+            2 => Some(0),
+            3 => Some(1),
+            _ => None,
+        };
+        if let Some(axis) = axis {
+            // Directional modes prefer the closest right/up annotation.
+            // Keep selection order for equally placed candidates.
+            lens.sort_by(|&a, &b| texts[a].position[axis].total_cmp(&texts[b].position[axis]));
+        }
+        let mut used = vec![false; texts.len()];
+        let mut unmatched = 0;
         for ci in caps {
             let a = &texts[ci];
+            let start = axis.map_or(0, |axis| {
+                lens.partition_point(|&li| texts[li].position[axis] - a.position[axis] <= 0.0001)
+            });
             let mut best = None;
-            for &li in &lens {
-                if used.contains(&li) {
+            for &li in &lens[start..] {
+                if used[li] {
                     continue;
                 }
                 let b = &texts[li];
@@ -432,21 +446,27 @@ pub fn capture(
                 let dy = b.position[1] - a.position[1];
                 let dz = b.position[2] - a.position[2];
                 let score = match settings.mode {
-                    1 => (dx * dx + dy * dy + dz * dz).sqrt(),
+                    1 => dx * dx + dy * dy + dz * dz,
                     2 if dy.abs() <= settings.tolerance && dx > 0.0001 => dx,
                     3 if dx.abs() <= settings.tolerance && dy > 0.0001 => dy,
                     _ => continue,
                 };
                 if best.map_or(true, |(_, s)| score < s) {
                     best = Some((li, score));
+                    if axis.is_some() {
+                        break;
+                    }
                 }
             }
             if let Some((li, _)) = best {
-                used.insert(li);
+                used[li] = true;
                 groups.push((vec![ci, li], a.quantity, a.diameter, texts[li].length));
             } else {
-                host.push_info(&format!("Eşleştirilemedi: {}", a.text));
+                unmatched += 1;
             }
+        }
+        if unmatched > 0 {
+            host.push_info(&format!("{unmatched} demir yazısı eşleştirilemedi."));
         }
     }
     if groups.is_empty() {
@@ -485,24 +505,6 @@ pub fn capture(
     let color_offset = store.projects[p].groups[g].rebar.len();
     store.projects[p].groups[g].rebar.extend(rows);
     store.save()?;
-    host.begin_undo_group("Demir metrajı işaretleri");
-    let calculated = if host.document().layers.get("HESAPLANDI").is_some() {
-        true
-    } else {
-        host.add_layer(LayerConfig {
-            name: "HESAPLANDI".into(),
-            ..Default::default()
-        })
-        .is_some()
-    };
-    let box_layer = boxes
-        && (host.document().layers.get("METRAJ_ESLESME_KUTU").is_some()
-            || host
-                .add_layer(LayerConfig {
-                    name: "METRAJ_ESLESME_KUTU".into(),
-                    ..Default::default()
-                })
-                .is_some());
     let mut updates = Vec::new();
     let mut rectangles = Vec::new();
     for (i, (ids, _, _, _)) in groups.iter().enumerate() {
@@ -520,62 +522,64 @@ pub fn capture(
         for id in ids {
             let mut entity = texts[*id].entity.clone();
             entity.common_mut().color = color;
-            if calculated {
-                entity.common_mut().layer = "HESAPLANDI".into();
+            entity.common_mut().layer = "HESAPLANDI".into();
+            if boxes {
+                let b = match &entity {
+                    EntityType::Text(t) => t.bounding_box(),
+                    EntityType::MText(t) => mtext_bounds(t),
+                    _ => unreachable!(),
+                };
+                bounds = Some(match bounds {
+                    None => [b.min.x, b.min.y, b.max.x, b.max.y, b.min.z],
+                    Some(a) => [
+                        a[0].min(b.min.x),
+                        a[1].min(b.min.y),
+                        a[2].max(b.max.x),
+                        a[3].max(b.max.y),
+                        a[4].min(b.min.z),
+                    ],
+                });
             }
-            let b = match &entity {
-                EntityType::Text(t) => t.bounding_box(),
-                EntityType::MText(t) => mtext_bounds(t),
-                _ => unreachable!(),
-            };
-            bounds = Some(match bounds {
-                None => [b.min.x, b.min.y, b.max.x, b.max.y, b.min.z],
-                Some(a) => [
-                    a[0].min(b.min.x),
-                    a[1].min(b.min.y),
-                    a[2].max(b.max.x),
-                    a[3].max(b.max.y),
-                    a[4].min(b.min.z),
-                ],
-            });
             updates.push(entity);
         }
-        if box_layer {
-            if let Some(b) = bounds {
-                if b[0] < b[2] && b[1] < b[3] {
-                    let mut pl = document::entities::LwPolyline::from_points(vec![
-                        Vector2::new(b[0], b[1]),
-                        Vector2::new(b[2], b[1]),
-                        Vector2::new(b[2], b[3]),
-                        Vector2::new(b[0], b[3]),
-                    ]);
-                    pl.is_closed = true;
-                    pl.elevation = b[4];
-                    pl.common.color = color;
-                    pl.common.layer = "METRAJ_ESLESME_KUTU".into();
-                    rectangles.push(EntityType::LwPolyline(pl));
-                }
+        if let Some(b) = bounds {
+            if b[0] < b[2] && b[1] < b[3] {
+                let mut pl = document::entities::LwPolyline::from_points(vec![
+                    Vector2::new(b[0], b[1]),
+                    Vector2::new(b[2], b[1]),
+                    Vector2::new(b[2], b[3]),
+                    Vector2::new(b[0], b[3]),
+                ]);
+                pl.is_closed = true;
+                pl.elevation = b[4];
+                pl.common.color = color;
+                pl.common.layer = "METRAJ_ESLESME_KUTU".into();
+                rectangles.push(EntityType::LwPolyline(pl));
             }
         }
     }
-    if !calculated {
-        host.push_error("Metraj kaydedildi; HESAPLANDI katmanı oluşturulamadı.");
-    }
-    if boxes && !box_layer {
-        host.push_error("Metraj kaydedildi; eşleşme kutusu katmanı oluşturulamadı.");
-    }
-    if let Err(error) = host.update_entities_transaction("Metraj eşleşmelerini renklendir", updates)
+    host.begin_undo_group("Demir metrajı işaretleri");
+    if let Err(error) =
+        crate::selection::mark_entities(host, "Metraj eşleşmelerini renklendir", updates)
     {
         host.push_error(&format!(
-            "Metraj kaydedildi; çizim renklendirilemedi: {error}"
+            "Demir metrajı kaydedildi ancak renklendirme tamamlanamadı. {error}"
         ));
     } else if !rectangles.is_empty() {
         let expected = rectangles.len();
-        let added = host
-            .add_entities(rectangles)
-            .iter()
-            .filter(|handle| !handle.is_null())
-            .count();
+        let mut added = 0;
+        let mut remaining = rectangles.into_iter();
+        loop {
+            let batch: Vec<_> = remaining.by_ref().take(4096).collect();
+            if batch.is_empty() {
+                break;
+            }
+            added += host
+                .add_entities(batch)
+                .iter()
+                .filter(|handle| !handle.is_null())
+                .count();
+        }
         if added != expected {
             host.push_error(&format!(
                 "{expected} eşleşme çerçevesinden {added} tanesi çizildi."

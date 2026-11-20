@@ -1067,7 +1067,13 @@ impl OpenCADStudio {
                 }
             }
         }
-        if let StepInput::SelectionComplete(handles) = &input {
+        // External plugins receive selection handles over IPC. They cannot
+        // consume these full entity copies through the command adapter.
+        let needs_selection_geometry = self.tabs[i]
+            .active_cmd
+            .as_ref()
+            .is_some_and(|command| command.plugin_command_id().is_none());
+        if let (StepInput::SelectionComplete(handles), true) = (&input, needs_selection_geometry) {
             let exclude_locked = self.tabs[i]
                 .active_cmd
                 .as_ref()

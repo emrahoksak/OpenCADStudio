@@ -16,7 +16,7 @@ use store::Store;
 static MANIFEST: PluginManifest = PluginManifest {
     id: "metraj.opencad",
     name: "Metraj",
-    version: "0.2.2",
+    version: "0.2.3",
     description: "Proje, kalem ve demir metrajı çalışma panelleri",
     api_version: ApiVersion::CURRENT,
     ribbon_order: 55,

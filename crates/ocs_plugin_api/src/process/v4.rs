@@ -11,7 +11,7 @@ use interprocess::TryClone;
 use crate::host::{CommandSource, ExecutionResult, HostApi, HostNotification, PluginNotification};
 use crate::ipc::protocol::{HostRequest, HostResponse, PluginRequest, PluginResponse};
 use crate::ipc::server::handle_plugin_request;
-use crate::ipc::transport::send;
+use crate::ipc::transport::{send, TransportError};
 use crate::ipc::v4::protocol::{HostToPluginV4, NotificationEnvelope};
 use crate::ipc::v4::server::{
     default_notify_rate_limit, run_host_reader_thread, HostIncoming, RateLimiter, V4HostShared,
@@ -677,13 +677,25 @@ impl V4Connection {
                 "V4 connection is shut down",
             ))
         })?;
-        send(
+        let result = send(
             stream,
             &HostToPluginV4::Response {
                 id,
                 payload: response,
             },
-        )?;
+        );
+        match result {
+            // send rejects the frame before writing its length. The caller
+            // still needs a reply so it can recover or split its request.
+            Err(error @ TransportError::TooLarge(_)) => send(
+                stream,
+                &HostToPluginV4::Response {
+                    id,
+                    payload: PluginResponse::Error(error.to_string()),
+                },
+            )?,
+            result => result?,
+        }
         Ok(())
     }
 

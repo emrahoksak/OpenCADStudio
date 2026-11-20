@@ -135,7 +135,14 @@ pub fn run(
             | "METRAJ_MANUEL"
             | "METRAJ_DEMIR_MANUEL"
     ) {
-        if let Err(error) = crate::panels::refresh(host, &store) {
+        let refresh = match state.command.as_str() {
+            "METRAJ_AKTAR" | "METRAJ_DUZENLE" => crate::panels::refresh(host, &store),
+            "METRAJ_DEMIR_SIL" | "METRAJ_DEMIR_MANUEL" => {
+                crate::panels::refresh_measurements(host, &store, crate::panels::REBAR)
+            }
+            _ => crate::panels::refresh_measurements(host, &store, crate::panels::ITEMS),
+        };
+        if let Err(error) = refresh {
             host.push_error(&error);
             return;
         }

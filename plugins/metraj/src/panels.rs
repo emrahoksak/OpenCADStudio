@@ -512,10 +512,19 @@ fn detail_controls(
                 (i + 1).to_string(),
                 r.method.clone(),
                 format!("{:.4}", r.quantity),
-                r.source.clone(),
+                record_preview(&r.source),
             ]
         });
     record_values(updates, rows.collect());
+}
+
+fn record_preview(source: &str) -> String {
+    let mut chars = source.chars();
+    let mut preview: String = chars.by_ref().take(120).collect();
+    if chars.next().is_some() {
+        preview.push('…');
+    }
+    preview
 }
 
 fn record_values(updates: &mut HashMap<String, V>, rows: Vec<Vec<String>>) {
@@ -632,7 +641,7 @@ fn refresh_rebar(
                     r.quantity.to_string(),
                     format!("{:.2}", r.length_cm),
                     format!("{:.3}", r.weight_kg),
-                    r.source.clone(),
+                    record_preview(&r.source),
                 ]
             })
             .collect(),
@@ -642,6 +651,24 @@ fn refresh_rebar(
     }
     updates.insert("by_diameter:enabled".into(), V::Enabled(false));
     host.update_panel(REBAR, updates);
+}
+
+pub(crate) fn refresh_measurements(
+    host: &mut dyn HostApi,
+    store: &Store,
+    panel: &str,
+) -> Result<(), String> {
+    let mut s = state();
+    let (p, g) = s.target.group(store).ok_or("Etkin grup bulunamadı.")?;
+    let project = Some(&store.projects[p]);
+    let group = Some(&store.projects[p].groups[g]);
+    if panel == REBAR {
+        refresh_rebar(host, &mut s, project, group);
+    } else {
+        refresh_items(host, &mut s, project, group)?;
+    }
+    s.revision = store.stamp();
+    Ok(())
 }
 
 pub(crate) fn refresh(host: &mut dyn HostApi, store: &Store) -> Result<(), String> {
@@ -961,7 +988,11 @@ pub(crate) fn dispatch(host: &mut dyn HostApi, command: &str) -> Option<Result<(
             }
             _ => return Err("Bilinmeyen metraj komutu.".into()),
         }
-        refresh(host, &store)?;
+        if panel == SETTINGS {
+            refresh(host, &store)?;
+        } else {
+            refresh_measurements(host, &store, panel)?;
+        }
         reveal(host, panel)
     })())
 }

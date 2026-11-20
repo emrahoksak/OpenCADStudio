@@ -151,21 +151,68 @@ fn measure(
     let panel = measurement.panel();
     let mut entities = Vec::with_capacity(handles.len());
     for batch in handles.chunks(256) {
-        let rows = host.entities_batch(batch)?;
-        if rows.len() != batch.len() {
-            return Err("Çizimdeki seçim kümesi okunamadı.".into());
-        }
-        for (&handle, row) in batch.iter().zip(rows) {
-            let entity: EntityType = row.ok_or_else(|| {
-                format!("{:X} numaralı nesne çizimde bulunamadı.", handle.value())
-            })?;
-            entities.push(entity);
-        }
+        read_entities(host, batch, &mut entities)?;
     }
     match measurement {
         Measurement::Item(options) => workflow::measure(host, store, options, entities)?,
         Measurement::Rebar(options) => rebar::capture(host, store, options, entities)?,
     }
-    panels::refresh(host, store)?;
+    panels::refresh_measurements(host, store, panel)?;
     panels::reveal(host, panel)
+}
+
+fn read_entities(
+    host: &dyn HostApi,
+    handles: &[Handle],
+    entities: &mut Vec<EntityType>,
+) -> Result<(), String> {
+    match host.entities_batch(handles) {
+        Ok(rows) if rows.len() == handles.len() => {
+            for (&handle, row) in handles.iter().zip(rows) {
+                let entity = row.ok_or_else(|| {
+                    format!("{:X} numaralı nesne çizimde bulunamadı.", handle.value())
+                })?;
+                entities.push(entity);
+            }
+            Ok(())
+        }
+        Ok(_) => Err("Çizimdeki seçim kümesi okunamadı.".into()),
+        Err(error) if error.starts_with("message too large:") => {
+            if handles.len() == 1 {
+                return Err(format!(
+                    "{:X} numaralı nesnenin geometrisi aktarım sınırını aşıyor.",
+                    handles[0].value()
+                ));
+            }
+            let (left, right) = handles.split_at(handles.len() / 2);
+            read_entities(host, left, entities)?;
+            read_entities(host, right, entities)
+        }
+        Err(error) => Err(error),
+    }
+}
+
+pub(crate) fn mark_entities(
+    host: &mut dyn HostApi,
+    label: &str,
+    entities: Vec<EntityType>,
+) -> Result<(), String> {
+    // Leave room for request framing. One entity can exceed this target
+    // budget and is then sent on its own.
+    const BATCH_BYTES: u64 = 32 * 1024 * 1024;
+    let mut batch = Vec::new();
+    let mut bytes = 0u64;
+    for entity in entities {
+        let size = bincode::serialized_size(&entity).map_err(|error| error.to_string())?;
+        if !batch.is_empty() && bytes.saturating_add(size) > BATCH_BYTES {
+            host.update_entities_transaction(label, std::mem::take(&mut batch))?;
+            bytes = 0;
+        }
+        bytes += size;
+        batch.push(entity);
+    }
+    if !batch.is_empty() {
+        host.update_entities_transaction(label, batch)?;
+    }
+    Ok(())
 }
