@@ -1,0 +1,229 @@
+use crate::store::Store;
+use ocs_plugin_api::dialog::{DialogDef, DialogResponse, PanelSnapshot};
+use ocs_plugin_api::host::{
+    CommandStep, Document, DocumentReader, EntityType, ExtendedDataRecord, Handle, HostApi,
+    InteractiveCommand, LayerConfig,
+};
+use std::any::Any;
+use std::sync::{Mutex, OnceLock};
+
+struct Session {
+    command: String,
+    responses: Vec<DialogResponse>,
+    selection: Vec<Handle>,
+    tab: usize,
+    revision: Option<Vec<u8>>,
+    panel: Option<PanelSnapshot>,
+}
+fn session() -> &'static Mutex<Option<Session>> {
+    static SESSION: OnceLock<Mutex<Option<Session>>> = OnceLock::new();
+    SESSION.get_or_init(|| Mutex::new(None))
+}
+
+pub fn run(
+    host: &mut dyn HostApi,
+    command: &str,
+    execute: fn(&mut dyn HostApi, &str) -> Result<(), String>,
+) {
+    let state = if command == "METRAJ_DEVAM" {
+        match session().lock().unwrap().take() {
+            Some(s) => s,
+            None => {
+                host.push_error("Metraj işlem oturumu bulunamadı.");
+                return;
+            }
+        }
+    } else {
+        let revision = match Store::revision() {
+            Ok(revision) => revision,
+            Err(error) => {
+                host.push_error(&error);
+                return;
+            }
+        };
+        Session {
+            command: command.into(),
+            responses: Vec::new(),
+            selection: host.selection(),
+            tab: host.tab_index(),
+            revision,
+            panel: host.panel_snapshot(crate::PANEL_ID).ok(),
+        }
+    };
+    if state.tab != host.tab_index() {
+        host.push_error("Çizim sekmesi değişti; metraj işlemi iptal edildi.");
+        return;
+    }
+    if command == "METRAJ_DEVAM"
+        && !matches!(Store::revision(), Ok(revision) if revision == state.revision)
+    {
+        host.push_error("Metraj verileri değişti. İşlemi yeniden başlatın.");
+        return;
+    }
+    let (outcome, pending) = {
+        let mut proxy = ReplayHost {
+            host,
+            answers: &state.responses,
+            cursor: 0,
+            pending: None,
+            selection: &state.selection,
+            panel: state.panel.as_ref(),
+        };
+        let outcome = execute(&mut proxy, &state.command);
+        (outcome, proxy.pending)
+    };
+    if let Some(dialog) = pending {
+        *session().lock().unwrap() = Some(state);
+        host.start_interactive(Box::new(Form {
+            dialog,
+            closed: false,
+        }));
+    } else if let Err(error) = outcome {
+        host.push_error(&error);
+    } else if matches!(
+        state.command.as_str(),
+        "METRAJ_PROJE" | "METRAJ_GRUP" | "METRAJ_DUZENLE" | "METRAJ_AKTAR"
+    ) {
+        crate::refresh_panel(host);
+    }
+}
+struct Form {
+    dialog: DialogDef,
+    closed: bool,
+}
+impl InteractiveCommand for Form {
+    fn prompt(&self) -> String {
+        "Metraj formunu doldurun".into()
+    }
+    fn on_point(&mut self, _: [f64; 3]) -> CommandStep {
+        CommandStep::NeedPoint
+    }
+    fn modal_dialog(&self) -> Option<DialogDef> {
+        if self.closed {
+            None
+        } else {
+            Some(self.dialog.clone())
+        }
+    }
+    fn on_dialog_response(&mut self, response: DialogResponse) -> CommandStep {
+        self.closed = true;
+        let mut guard = session().lock().unwrap();
+        if matches!(response, DialogResponse::Cancelled) {
+            *guard = None;
+            return CommandStep::Cancel;
+        }
+        if let Some(s) = guard.as_mut() {
+            s.responses.push(response);
+            CommandStep::Dispatch("METRAJ_DEVAM".into())
+        } else {
+            CommandStep::Cancel
+        }
+    }
+}
+struct ReplayHost<'a> {
+    host: &'a mut dyn HostApi,
+    answers: &'a [DialogResponse],
+    cursor: usize,
+    pending: Option<DialogDef>,
+    selection: &'a [Handle],
+    panel: Option<&'a PanelSnapshot>,
+}
+impl HostApi for ReplayHost<'_> {
+    fn tab_index(&self) -> usize {
+        self.host.tab_index()
+    }
+    fn document(&self) -> &Document {
+        self.host.document()
+    }
+    fn document_mut(&mut self) -> &mut Document {
+        self.host.document_mut()
+    }
+    fn add_entity(&mut self, e: EntityType) -> Handle {
+        self.host.add_entity(e)
+    }
+    fn add_entities(&mut self, e: Vec<EntityType>) -> Vec<Handle> {
+        self.host.add_entities(e)
+    }
+    fn add_layer(&mut self, c: LayerConfig) -> Option<Handle> {
+        self.host.add_layer(c)
+    }
+    fn update_entities_transaction(
+        &mut self,
+        label: &str,
+        e: Vec<EntityType>,
+    ) -> Result<(), String> {
+        self.host.update_entities_transaction(label, e)
+    }
+    fn bump_geometry(&mut self) {
+        self.host.bump_geometry()
+    }
+    fn read_record(&self, h: Handle, a: &str) -> Option<&ExtendedDataRecord> {
+        self.host.read_record(h, a)
+    }
+    fn write_record(&mut self, h: Handle, r: ExtendedDataRecord) -> bool {
+        self.host.write_record(h, r)
+    }
+    fn remove_record(&mut self, h: Handle, a: &str) -> bool {
+        self.host.remove_record(h, a)
+    }
+    fn push_undo(&mut self, label: &str) {
+        self.host.push_undo(label)
+    }
+    fn begin_undo_group(&mut self, label: &str) {
+        self.host.begin_undo_group(label)
+    }
+    fn end_undo_group(&mut self) {
+        self.host.end_undo_group()
+    }
+    fn set_dirty(&mut self) {
+        self.host.set_dirty()
+    }
+    fn push_info(&mut self, msg: &str) {
+        self.host.push_info(msg)
+    }
+    fn push_output(&mut self, msg: &str) {
+        self.host.push_output(msg)
+    }
+    fn push_error(&mut self, msg: &str) {
+        self.host.push_error(msg)
+    }
+    fn start_interactive(&mut self, c: Box<dyn InteractiveCommand>) {
+        self.host.start_interactive(c)
+    }
+    fn plugin_state_any(&self, id: &str) -> Option<&(dyn Any + Send + Sync)> {
+        self.host.plugin_state_any(id)
+    }
+    fn plugin_state_any_mut(&mut self, id: &str) -> Option<&mut (dyn Any + Send + Sync)> {
+        self.host.plugin_state_any_mut(id)
+    }
+    fn ensure_plugin_state_any(
+        &mut self,
+        id: &'static str,
+        init: &mut dyn FnMut() -> Box<dyn Any + Send + Sync>,
+    ) -> Option<&mut (dyn Any + Send + Sync)> {
+        self.host.ensure_plugin_state_any(id, init)
+    }
+    fn document_reader(&self) -> Box<dyn DocumentReader + '_> {
+        self.host.document_reader()
+    }
+    fn selection(&self) -> Vec<Handle> {
+        self.selection.to_vec()
+    }
+    fn panel_snapshot(&self, panel_id: &str) -> Result<PanelSnapshot, String> {
+        self.panel
+            .filter(|panel| panel.panel_id == panel_id)
+            .cloned()
+            .ok_or_else(|| "Metraj paneli bulunamadı.".into())
+    }
+    fn show_dialog(&mut self, dialog: DialogDef) -> DialogResponse {
+        if let Some(response) = self.answers.get(self.cursor) {
+            self.cursor += 1;
+            response.clone()
+        } else {
+            if self.pending.is_none() {
+                self.pending = Some(dialog);
+            }
+            DialogResponse::Cancelled
+        }
+    }
+}

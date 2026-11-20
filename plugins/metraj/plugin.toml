@@ -1,0 +1,15 @@
+[plugin]
+id = "metraj.opencad"
+name = "Metraj"
+version = "0.1.0"
+description = "Proje bazlı metraj yönetimi"
+author = "Metraj"
+license = "GPL-3.0-only"
+
+[opencad]
+api_version = 26
+rustc_version = "rustc 1.100.0 (0ef1bc386 2026-11-09)"
+acadrust_source = "git+https://github.com/hakanaktt/acadrust.git?rev=a7d378502748e6428655aa091306f01f7f3a17a9#a7d378502748e6428655aa091306f01f7f3a17a9"
+ribbon_order = 55
+command_prefixes = ["METRAJ"]
+xdata_apps = []
